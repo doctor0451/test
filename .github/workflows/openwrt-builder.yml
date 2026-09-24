@@ -75,14 +75,14 @@ jobs:
         ./scripts/feeds clean
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-        
+
     - name: Load custom configuration
       run: |
         [ -e files ] && mv files ponwrt/files
         cp ponwrt/$CONFIG_FILE ponwrt/.config
         chmod +x $DIY_P2_SH
         cd ponwrt
-        $GITHUB_WORKSPACE/$DIY_P2_SH    
+        $GITHUB_WORKSPACE/$DIY_P2_SH
 
     - name: Download package
       id: package
@@ -104,7 +104,7 @@ jobs:
         #make -j1 V=s  #我修改的方案一
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(paste -sd '_' DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
     - name: Check space usage
