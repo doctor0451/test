@@ -3,6 +3,8 @@
 # File name: diy-part2.sh
 # Description: OpenWrt DIY script part 2 (After Update feeds)
 #
+# 执行时机：workflow 中 "Load custom configuration" 步骤
+# 当前工作目录：ponwrt/
 
 # ============================================================
 # 1. 修改默认后台管理 IP（ponwrt 默认预置 192.168.1.1）
@@ -29,9 +31,7 @@ for dev in \
     znxt_zn504xg-d \
     znxt_zn515xg-d
 do
-    # 关闭 DEVICE 行
     sed -i "s/^CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_${dev}=y/# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_${dev} is not set/g" .config
-    # 关闭对应的 PACKAGES 行
     sed -i "s/^CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_${dev}=\"\"/# CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_${dev} is not set/g" .config
 done
 
@@ -39,4 +39,11 @@ done
 sed -i 's/^# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_nokia_xg-040g-md-ubi is not set/CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_nokia_xg-040g-md-ubi=y/' .config
 sed -i 's/^# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_fiberhome_hg5585f-ct is not set/CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_fiberhome_hg5585f-ct=y/' .config
 
-echo "diy-part2.sh done: 仅保留 nokia_xg-040g-md-ubi 和 fiberhome_hg5585f-ct"
+# ============================================================
+# 4. 选中 luci-app-airoha-npu
+#    如果 .config 中已有对应行，则改成 =y；没有则追加
+# ============================================================
+sed -i 's/^# CONFIG_PACKAGE_luci-app-airoha-npu is not set/CONFIG_PACKAGE_luci-app-airoha-npu=y/' .config
+grep -q "^CONFIG_PACKAGE_luci-app-airoha-npu=" .config || echo "CONFIG_PACKAGE_luci-app-airoha-npu=y" >> .config
+
+echo "diy-part2.sh done: 仅保留 nokia_xg-040g-md-ubi 和 fiberhome_hg5585f-ct，并选中 luci-app-airoha-npu."
