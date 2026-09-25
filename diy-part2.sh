@@ -47,3 +47,28 @@ sed -i 's/^# CONFIG_PACKAGE_luci-app-airoha-npu is not set/CONFIG_PACKAGE_luci-a
 grep -q "^CONFIG_PACKAGE_luci-app-airoha-npu=" .config || echo "CONFIG_PACKAGE_luci-app-airoha-npu=y" >> .config
 
 echo "diy-part2.sh done: 仅保留 nokia_xg-040g-md-ubi 和 fiberhome_hg5585f-ct，并选中 luci-app-airoha-npu."
+
+
+# ============================================================
+# 选中 iStore 商店及首页 (quickstart)
+# ============================================================
+# iStore 软件中心（商店本体）
+sed -i 's/^# CONFIG_PACKAGE_luci-app-store is not set/CONFIG_PACKAGE_luci-app-store=y/' .config
+grep -q "^CONFIG_PACKAGE_luci-app-store=" .config || echo "CONFIG_PACKAGE_luci-app-store=y" >> .config
+
+# iStore 首页 / 网络向导（quickstart）
+sed -i 's/^# CONFIG_PACKAGE_luci-app-quickstart is not set/CONFIG_PACKAGE_luci-app-quickstart=y/' .config
+grep -q "^CONFIG_PACKAGE_luci-app-quickstart=" .config || echo "CONFIG_PACKAGE_luci-app-quickstart=y" >> .config
+
+# iStore 首页中文语言包
+sed -i 's/^# CONFIG_PACKAGE_luci-i18n-quickstart-zh-cn is not set/CONFIG_PACKAGE_luci-i18n-quickstart-zh-cn=y/' .config
+grep -q "^CONFIG_PACKAGE_luci-i18n-quickstart-zh-cn=" .config || echo "CONFIG_PACKAGE_luci-i18n-quickstart-zh-cn=y" >> .config
+
+# 依赖：luci-compat（21及以上版本固件需要）[citation:5]
+sed -i 's/^# CONFIG_PACKAGE_luci-compat is not set/CONFIG_PACKAGE_luci-compat=y/' .config
+grep -q "^CONFIG_PACKAGE_luci-compat=" .config || echo "CONFIG_PACKAGE_luci-compat=y" >> .config
+
+# 可选：如果使用第三方源，可能需要 istorex 相关包
+# sed -i 's/^# CONFIG_PACKAGE_luci-app-istorex is not set/CONFIG_PACKAGE_luci-app-istorex=y/' .config
+
+echo "diy-part2.sh done: iStore + quickstart 已选中。"
