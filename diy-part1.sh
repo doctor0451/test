@@ -28,3 +28,14 @@ else
 fi
 
 echo "diy-part1.sh done: luci-app-airoha-npu cloned into package/."
+
+# ============================================================
+# 集成 iStore 软件中心及首页 (quickstart)
+# ============================================================
+# 1. 添加 iStore 官方 feed 源
+grep -q "src-git istore" feeds.conf.default || \
+    echo "src-git istore https://github.com/linkease/istore;main" >> feeds.conf.default
+
+# 2. 可选：添加 quickstart 及依赖所在第三方源（由 kenzok8 维护）
+grep -q "src-git small" feeds.conf.default || \
+    echo "src-git small https://github.com/kenzok8/small-package" >> feeds.conf.default
