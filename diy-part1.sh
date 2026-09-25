@@ -8,18 +8,11 @@
 
 # ============================================================
 # 1. 移除不需要的 feed（可选）
-#    例如删除 helloworld feed，避免污染
 # ============================================================
 # sed -i '/helloworld/d' feeds.conf.default
 
 # ============================================================
-# 2. 添加第三方 feed（可选，按需取消注释）
-# ============================================================
-# echo "src-git airoha_npu https://github.com/luanmuc/luci-app-airoha-npu.git" >> feeds.conf.default
-
-# ============================================================
-# 3. 直接克隆 luci-app-airoha-npu 到 package 目录
-#    方案二：不使用 feed 机制，直接把源码放到 package/ 下
+# 2. 直接克隆 luci-app-airoha-npu 到 package 目录
 # ============================================================
 if [ ! -d "package/luci-app-airoha-npu" ]; then
     git clone --depth=1 https://github.com/luanmuc/luci-app-airoha-npu.git package/luci-app-airoha-npu
@@ -27,15 +20,11 @@ else
     echo "package/luci-app-airoha-npu already exists, skip clone."
 fi
 
-echo "diy-part1.sh done: luci-app-airoha-npu cloned into package/."
-
 # ============================================================
-# 集成 iStore 软件中心及首页 (quickstart)
+# 3. 添加 iStore 官方 feed 源（只保留这一个）
+#    注意：如果你的固件已经通过其他方式包含 quickstart，可跳过
 # ============================================================
-# 1. 添加 iStore 官方 feed 源
 grep -q "src-git istore" feeds.conf.default || \
-    echo "src-git istore https://github.com/linkease/istore;main" >> feeds.conf.default
+    echo "src-git istore https://github.com/linkease/istore.git;main" >> feeds.conf.default
 
-# 2. 可选：添加 quickstart 及依赖所在第三方源（由 kenzok8 维护）
-grep -q "src-git small" feeds.conf.default || \
-    echo "src-git small https://github.com/kenzok8/small-package" >> feeds.conf.default
+echo "diy-part1.sh done: luci-app-airoha-npu cloned, istore feed added."
