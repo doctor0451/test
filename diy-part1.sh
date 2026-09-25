@@ -21,10 +21,14 @@ else
 fi
 
 # ============================================================
-# 3. 添加 iStore 官方 feed 源（只保留这一个）
-#    注意：如果你的固件已经通过其他方式包含 quickstart，可跳过
+# 3. 添加 kenzok8/small-package 源（包含 iStore 商店和首页）
+#    注意：不要同时添加 istore 官方源，以免同名包冲突导致编译失败
 # ============================================================
-grep -q "src-git istore" feeds.conf.default || \
-    echo "src-git istore https://github.com/linkease/istore.git;main" >> feeds.conf.default
+# 先移除可能存在的 istore 源，防止冲突
+sed -i '/src-git istore/d' feeds.conf.default
 
-echo "diy-part1.sh done: luci-app-airoha-npu cloned, istore feed added."
+# 添加 small-package 源
+grep -q "src-git small" feeds.conf.default || \
+    echo "src-git small https://github.com/kenzok8/small-package" >> feeds.conf.default
+
+echo "diy-part1.sh done: luci-app-airoha-npu cloned, kenzok8/small-package feed added."
