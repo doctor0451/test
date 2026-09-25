@@ -72,3 +72,25 @@ grep -q "^CONFIG_PACKAGE_luci-compat=" .config || echo "CONFIG_PACKAGE_luci-comp
 # sed -i 's/^# CONFIG_PACKAGE_luci-app-istorex is not set/CONFIG_PACKAGE_luci-app-istorex=y/' .config
 
 echo "diy-part2.sh done: iStore + quickstart 已选中。"
+
+
+# ============================================================
+# 补全 iStore 首页流量统计与状态依赖
+# ============================================================
+# 1. 补全流量统计核心组件
+for pkg in luci-app-statistics collectd collectd-mod-interface collectd-mod-network collectd-mod-rrdtool; do
+    sed -i "s/^# CONFIG_PACKAGE_${pkg} is not set/CONFIG_PACKAGE_${pkg}=y/" .config
+    grep -q "^CONFIG_PACKAGE_${pkg}=" .config || echo "CONFIG_PACKAGE_${pkg}=y" >> .config
+done
+
+# 2. 选中 luci-compat（部分 Quickstart 版本依赖）
+sed -i 's/^# CONFIG_PACKAGE_luci-compat is not set/CONFIG_PACKAGE_luci-compat=y/' .config
+grep -q "^CONFIG_PACKAGE_luci-compat=" .config || echo "CONFIG_PACKAGE_luci-compat=y" >> .config
+
+# 3. 强制指定默认 WAN 接口为 pppoe-wan（帮助前端识别）
+# （.config 中不涉及此文件，通过补丁在编译后注入，此处仅作注释记录）
+# 如需彻底修复前端识别，建议编译后手动修改 /etc/config/quickstart 或等待插件更新。
+
+
+
+
