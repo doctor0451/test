@@ -167,6 +167,6 @@ jobs:
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
         keep_latest: 10 # 👈 保留编译代码的个数
-        delete_tags: true
+        delete_tags: true # 👈 可以删除旧版本
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
