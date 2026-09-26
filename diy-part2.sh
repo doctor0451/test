@@ -19,25 +19,22 @@
 # sed -i 's/OpenWrt/XG-040G-MD/g' package/base-files/files/bin/config_generate
 
 # ============================================================
-# 3. 只保留 XG-040G-MD 和 HG5585F-CT 两个机型，关闭其余 an7581 设备
+# 3. 只保留 XG-040G-MD 和 HG5585F-CT 两个机型，关闭其余所有 an7581 设备
+#    采用白名单方式：先关闭全部，再打开指定机型，避免源仓库新增机型被误编译
 #    执行时机：make defconfig 之前，.config 为原始格式，sed 可精确匹配
 # ============================================================
-for dev in \
-    fiberhome_hg5382a \
-    fiberhome_hg5585f-cu \
-    gemtek_xg2010g \
-    nokia_xg-040g-tf-ubi \
-    unionman_ung00a \
-    znxt_zn504xg-d \
-    znxt_zn515xg-d
-do
-    sed -i "s/^CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_${dev}=y/# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_${dev} is not set/g" .config
-    sed -i "s/^CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_${dev}=\"\"/# CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_${dev} is not set/g" .config
-done
 
-# 确保两个目标机型保持开启
+# 3.1 关闭所有 an7581 设备及其 PACKAGES
+sed -i -E 's/^(CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_[^=]+)=y/# \1 is not set/' .config
+sed -i -E 's/^(CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_[^=]+)=""/# \1 is not set/' .config
+
+# 3.2 打开 XG-040G-MD
 sed -i 's/^# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_nokia_xg-040g-md-ubi is not set/CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_nokia_xg-040g-md-ubi=y/' .config
+sed -i 's/^# CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_nokia_xg-040g-md-ubi is not set/CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_nokia_xg-040g-md-ubi=""/' .config
+
+# 3.3 打开 HG5585F-CT
 sed -i 's/^# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_fiberhome_hg5585f-ct is not set/CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_fiberhome_hg5585f-ct=y/' .config
+sed -i 's/^# CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_fiberhome_hg5585f-ct is not set/CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_fiberhome_hg5585f-ct=""/' .config
 
 # ============================================================
 # 4. 选中 luci-app-airoha-npu
@@ -47,50 +44,3 @@ sed -i 's/^# CONFIG_PACKAGE_luci-app-airoha-npu is not set/CONFIG_PACKAGE_luci-a
 grep -q "^CONFIG_PACKAGE_luci-app-airoha-npu=" .config || echo "CONFIG_PACKAGE_luci-app-airoha-npu=y" >> .config
 
 echo "diy-part2.sh done: 仅保留 nokia_xg-040g-md-ubi 和 fiberhome_hg5585f-ct，并选中 luci-app-airoha-npu."
-
-
-# ============================================================
-# 选中 iStore 商店及首页 (quickstart)
-# ============================================================
-# iStore 软件中心（商店本体）
-sed -i 's/^# CONFIG_PACKAGE_luci-app-store is not set/CONFIG_PACKAGE_luci-app-store=y/' .config
-grep -q "^CONFIG_PACKAGE_luci-app-store=" .config || echo "CONFIG_PACKAGE_luci-app-store=y" >> .config
-
-# iStore 首页 / 网络向导（quickstart）
-sed -i 's/^# CONFIG_PACKAGE_luci-app-quickstart is not set/CONFIG_PACKAGE_luci-app-quickstart=y/' .config
-grep -q "^CONFIG_PACKAGE_luci-app-quickstart=" .config || echo "CONFIG_PACKAGE_luci-app-quickstart=y" >> .config
-
-# iStore 首页中文语言包
-sed -i 's/^# CONFIG_PACKAGE_luci-i18n-quickstart-zh-cn is not set/CONFIG_PACKAGE_luci-i18n-quickstart-zh-cn=y/' .config
-grep -q "^CONFIG_PACKAGE_luci-i18n-quickstart-zh-cn=" .config || echo "CONFIG_PACKAGE_luci-i18n-quickstart-zh-cn=y" >> .config
-
-# 依赖：luci-compat（21及以上版本固件需要）[citation:5]
-sed -i 's/^# CONFIG_PACKAGE_luci-compat is not set/CONFIG_PACKAGE_luci-compat=y/' .config
-grep -q "^CONFIG_PACKAGE_luci-compat=" .config || echo "CONFIG_PACKAGE_luci-compat=y" >> .config
-
-# 可选：如果使用第三方源，可能需要 istorex 相关包
-# sed -i 's/^# CONFIG_PACKAGE_luci-app-istorex is not set/CONFIG_PACKAGE_luci-app-istorex=y/' .config
-
-echo "diy-part2.sh done: iStore + quickstart 已选中。"
-
-
-# ============================================================
-# 补全 iStore 首页流量统计与状态依赖
-# ============================================================
-# 1. 补全流量统计核心组件
-for pkg in luci-app-statistics collectd collectd-mod-interface collectd-mod-network collectd-mod-rrdtool; do
-    sed -i "s/^# CONFIG_PACKAGE_${pkg} is not set/CONFIG_PACKAGE_${pkg}=y/" .config
-    grep -q "^CONFIG_PACKAGE_${pkg}=" .config || echo "CONFIG_PACKAGE_${pkg}=y" >> .config
-done
-
-# 2. 选中 luci-compat（部分 Quickstart 版本依赖）
-sed -i 's/^# CONFIG_PACKAGE_luci-compat is not set/CONFIG_PACKAGE_luci-compat=y/' .config
-grep -q "^CONFIG_PACKAGE_luci-compat=" .config || echo "CONFIG_PACKAGE_luci-compat=y" >> .config
-
-# 3. 强制指定默认 WAN 接口为 pppoe-wan（帮助前端识别）
-# （.config 中不涉及此文件，通过补丁在编译后注入，此处仅作注释记录）
-# 如需彻底修复前端识别，建议编译后手动修改 /etc/config/quickstart 或等待插件更新。
-
-
-
-
