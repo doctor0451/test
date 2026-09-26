@@ -32,8 +32,8 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     permissions:  # ←新增这一行
-      actions: write      # ←新增这一行，允许删除旧 workflow run 记录（解决这个报错的关键）
-      contents: write        # ←新增这一行，允许创建 Release、上传固件
+      actions: write      # 👈 新增这一行，允许删除旧 workflow run 记录（解决这个报错的关键）
+      contents: write        # 👈 新增这一行，允许创建 Release、上传固件
 
     steps:
     - name: Checkout
@@ -159,14 +159,14 @@ jobs:
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
       with:
-        retain_days: 365 #保留天数
-        keep_minimum_runs: 9 #最多保留历史数+当前编译=10个
+        retain_days: 365 # 👈 保留编译成果天数
+        keep_minimum_runs: 9 # 👈 最多保留历史数+当前编译=10个
 
     - name: Remove old Releases
       uses: dev-drprasad/delete-older-releases@master
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
-        keep_latest: 10
+        keep_latest: 10 # 👈 保留编译代码的个数
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
