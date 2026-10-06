@@ -21,15 +21,14 @@ else
 fi
 
 # ============================================================
-# 3. 用自己的 autocore 覆盖源码中的 package/emortal/autocore
+# 3. 添加 kenzok8/small-package 源（包含 iStore 商店和首页）
+#    注意：不要同时添加 istore 官方源，以免同名包冲突导致编译失败
 # ============================================================
-if [ -d "$GITHUB_WORKSPACE/autocore" ]; then
-    echo "使用自定义 autocore 覆盖 package/emortal/autocore..."
-    rm -rf package/emortal/autocore
-    cp -rf "$GITHUB_WORKSPACE/autocore" package/emortal/autocore
-    echo "autocore 覆盖完成。"
-else
-    echo "警告：$GITHUB_WORKSPACE/autocore 不存在，跳过覆盖。"
-fi
+# 先移除可能存在的 istore 源，防止冲突
+sed -i '/src-git istore/d' feeds.conf.default
 
-echo "diy-part1.sh done: luci-app-airoha-npu cloned, autocore overridden."
+# 添加 small-package 源
+grep -q "src-git small" feeds.conf.default || \
+    echo "src-git small https://github.com/kenzok8/small-package" >> feeds.conf.default
+
+echo "diy-part1.sh done: luci-app-airoha-npu cloned, kenzok8/small-package feed added."
