@@ -124,21 +124,18 @@ jobs:
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
-        # 创建一个扁平目录，把所有需要上传到 Release 的文件集中到这里
-        mkdir -p release-files
-
-        # 进入源码目录，避免符号链接导致 find 失败
-        cd ponwrt
+        # 使用固定的绝对路径作为扁平化目录，避免 cd 导致的相对路径问题
+        RELEASE_DIR="/tmp/firmware-release"
+        mkdir -p "$RELEASE_DIR"
 
         # 递归查找所有 .bin / .manifest / .buildinfo 文件并复制到扁平目录
-        find bin/targets -type f \( -name "*.bin" -o -name "*.manifest" -o -name "*.buildinfo" \) -exec cp {} release-files/ \;
+        find /workdir/ponwrt/bin/targets -type f \( -name "*.bin" -o -name "*.manifest" -o -name "*.buildinfo" \) -exec cp {} "$RELEASE_DIR/" \;
 
         # 列出收集到的文件，方便排查
         echo "=== Files collected for release ==="
-        ls -lh release-files/
+        ls -lh "$RELEASE_DIR/"
 
-        # 使用绝对路径设置 FIRMWARE，确保后续步骤能正确找到
-        echo "FIRMWARE=$PWD/release-files" >> $GITHUB_ENV
+        echo "FIRMWARE=$RELEASE_DIR" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
@@ -158,14 +155,14 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
-      uses: softprops/action-gh-release@v2   # 改为 v2，支持 glob 上传
+      uses: softprops/action-gh-release@v2
       if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
-        files: release-files/*
+        files: ${{ env.FIRMWARE }}/*
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
