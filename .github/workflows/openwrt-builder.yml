@@ -127,13 +127,17 @@ jobs:
         # 创建一个扁平目录，把所有需要上传到 Release 的文件集中到这里
         mkdir -p release-files
 
+        # 进入源码目录，避免符号链接导致 find 失败
+        cd ponwrt
+
         # 递归查找所有 .bin / .manifest / .buildinfo 文件并复制到扁平目录
-        find ponwrt/bin/targets -type f \( -name "*.bin" -o -name "*.manifest" -o -name "*.buildinfo" \) -exec cp {} release-files/ \;
+        find bin/targets -type f \( -name "*.bin" -o -name "*.manifest" -o -name "*.buildinfo" \) -exec cp {} release-files/ \;
 
         # 列出收集到的文件，方便排查
         echo "=== Files collected for release ==="
         ls -lh release-files/
 
+        # 使用绝对路径设置 FIRMWARE，确保后续步骤能正确找到
         echo "FIRMWARE=$PWD/release-files" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
