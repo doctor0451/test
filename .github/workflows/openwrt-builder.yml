@@ -31,15 +31,15 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    permissions:  # ←新增这一行
-      actions: write      # 👈 新增这一行，允许删除旧 workflow run 记录（解决这个报错的关键）
-      contents: write        # 👈 新增这一行，允许创建 Release、上传固件
+    permissions:
+      actions: write      # 允许删除旧 workflow run 记录
+      contents: write     # 允许创建 Release、上传固件
 
     steps:
     - name: Checkout
       uses: actions/checkout@main
       with:
-        fetch-depth: 0      # 拉取完整提交历史，供 autocore 按提交时间比较使用
+        fetch-depth: 0     # 拉取完整提交历史，供 autocore 日期比较使用
 
     - name: Initialization environment
       env:
@@ -61,7 +61,7 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH ponwrt
         ln -sf /workdir/ponwrt $GITHUB_WORKSPACE/ponwrt
-        cd ponwrt && git config --global --add safe.directory /workdir/ponwrt #我的代码
+        cd ponwrt && git config --global --add safe.directory /workdir/ponwrt
 
     - name: Load custom feeds
       run: |
@@ -124,18 +124,9 @@ jobs:
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
-        # 使用固定的绝对路径作为扁平化目录，避免 cd 导致的相对路径问题
-        RELEASE_DIR="/tmp/firmware-release"
-        mkdir -p "$RELEASE_DIR"
-
-        # 递归查找所有 .bin / .manifest / .buildinfo 文件并复制到扁平目录
-        find /workdir/ponwrt/bin/targets -type f \( -name "*.bin" -o -name "*.manifest" -o -name "*.buildinfo" \) -exec cp {} "$RELEASE_DIR/" \;
-
-        # 列出收集到的文件，方便排查
-        echo "=== Files collected for release ==="
-        ls -lh "$RELEASE_DIR/"
-
-        echo "FIRMWARE=$RELEASE_DIR" >> $GITHUB_ENV
+        cd ponwrt/bin/targets/*/*
+        rm -rf packages
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
@@ -155,14 +146,20 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@master
       if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*
+        files: |
+          ${{ env.FIRMWARE }}/*.bin
+          ${{ env.FIRMWARE }}/*.manifest
+          ${{ env.FIRMWARE }}/*.buildinfo
+          ${{ env.FIRMWARE }}/**/*.bin
+          ${{ env.FIRMWARE }}/**/*.manifest
+          ${{ env.FIRMWARE }}/**/*.buildinfo
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
