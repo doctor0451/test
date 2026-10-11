@@ -106,4 +106,75 @@ else
     echo "未发现 apk 目录，跳过自定义 apk 集成。"
 fi
 
-echo "diy-part2.sh done: 仅保留 nokia_xg-040g-md-ubi 和 fiberhome_hg5585f-ct，选中 luci-app-airoha-npu，集成自定义 apk。"
+# ============================================================
+# 6. 启用 Docker 支持（云编译时可选）
+#    是否执行由 workflow_dispatch 的 enable_docker 开关控制
+#    对应环境变量：DOCKER_ENABLED = true / false
+# ============================================================
+if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
+    echo "Docker 支持已启用，开始配置..."
+
+    # 辅助函数：设置 .config 中某项为指定值
+    # 兼容三种情况：已存在、已注释、不存在
+    set_config() {
+        local key="$1"
+        local value="$2"
+        if grep -q "^${key}=" .config; then
+            sed -i "s|^${key}=.*|${key}=${value}|" .config
+        elif grep -q "^# ${key} is not set" .config; then
+            sed -i "s|^# ${key} is not set|${key}=${value}|" .config
+        else
+            echo "${key}=${value}" >> .config
+        fi
+    }
+
+    # 6.1 内核功能开关
+    set_config CONFIG_KERNEL_CGROUPS           y
+    set_config CONFIG_KERNEL_NAMESPACES        y
+    set_config CONFIG_KERNEL_CGROUP_DEVICE     y
+    set_config CONFIG_KERNEL_MEMCG             y
+    set_config CONFIG_KERNEL_VETH              y
+    set_config CONFIG_KERNEL_BRIDGE            y
+    set_config CONFIG_KERNEL_OVERLAY_FS        y
+
+    # 6.2 内核模块（kmod）
+    #     说明：
+    #       - 这些 kmod 是 dockerd 的依赖，被选中后内核依赖选项会自动启用
+    #       - kmod-fs-ext4 / kmod-dm 是常用的存储驱动依赖
+    #       - 如需 btrfs 存储驱动，可取消下面的 kmod-fs-btrfs 注释
+    for kmod in \
+        kmod-veth \
+        kmod-ipt-nat \
+        kmod-ipt-nat6 \
+        kmod-ipt-physdev \
+        kmod-nf-ipvs \
+        kmod-br-netfilter \
+        kmod-nft-compat \
+        kmod-dm \
+        kmod-fs-ext4 \
+        # kmod-fs-btrfs \
+    ; do
+        set_config "CONFIG_PACKAGE_${kmod}" y
+    done
+
+    # 6.3 Docker 相关软件包
+    #     说明：
+    #       - docker / dockerd 是核心
+    #       - docker-compose 便于编排
+    #       - luci-app-dockerman + 中文语言包 提供 Web 管理界面
+    for pkg in \
+        docker \
+        dockerd \
+        docker-compose \
+        luci-app-dockerman \
+        luci-i18n-dockerman-zh-cn \
+    ; do
+        set_config "CONFIG_PACKAGE_${pkg}" y
+    done
+
+    echo "Docker 支持配置完成。"
+else
+    echo "Docker 支持未启用（DOCKER_ENABLED=${DOCKER_ENABLED:-false}），跳过第 6 段。"
+fi
+
+echo "diy-part2.sh done: 仅保留 nokia_xg-040g-md-ubi 和 fiberhome_hg5585f-ct，选中 luci-app-airoha-npu，集成自定义 apk，Docker 可选。"
