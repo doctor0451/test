@@ -138,7 +138,8 @@ if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
     set_config CONFIG_KERNEL_OVERLAY_FS        y
 
     # 6.2 内核模块（kmod）
-    #     如需 btrfs 存储驱动，把下面列表里的 kmod-fs-btrfs 取消注释即可
+    #     注意：续行列表里不能夹注释，否则会破坏续行符
+    #     如需 btrfs 存储驱动，直接在列表末尾加 kmod-fs-btrfs \
     for kmod in \
         kmod-veth \
         kmod-ipt-nat \
