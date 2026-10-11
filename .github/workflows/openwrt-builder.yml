@@ -145,6 +145,12 @@ jobs:
         echo "=== Files collected for release ==="
         ls -lh "$RELEASE_DIR/"
 
+        # 如果没有任何文件被收集到，直接让这一步失败，避免后面带着空路径去上传
+        if [ -z "$(ls -A "$RELEASE_DIR")" ]; then
+          echo "错误：没有收集到任何固件文件，请检查编译是否成功。"
+          exit 1
+        fi
+
         echo "FIRMWARE=$RELEASE_DIR" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -167,14 +173,15 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
-      uses: softprops/action-gh-release@v1   # 用 v1，避免 v2 的 /swapfile 权限问题
+      uses: softprops/action-gh-release@v2   # 保留 v2，之前一直可用
       if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*
+        # 直接用固定路径，避免 env.FIRMWARE 意外为空时把 /* 展开到根目录
+        files: /tmp/firmware-release/*
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
