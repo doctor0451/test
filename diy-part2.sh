@@ -138,10 +138,7 @@ if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
     set_config CONFIG_KERNEL_OVERLAY_FS        y
 
     # 6.2 内核模块（kmod）
-    #     说明：
-    #       - 这些 kmod 是 dockerd 的依赖，被选中后内核依赖选项会自动启用
-    #       - kmod-fs-ext4 / kmod-dm 是常用的存储驱动依赖
-    #       - 如需 btrfs 存储驱动，可取消下面的 kmod-fs-btrfs 注释
+    #     如需 btrfs 存储驱动，把下面列表里的 kmod-fs-btrfs 取消注释即可
     for kmod in \
         kmod-veth \
         kmod-ipt-nat \
@@ -152,16 +149,11 @@ if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
         kmod-nft-compat \
         kmod-dm \
         kmod-fs-ext4 \
-        # kmod-fs-btrfs \
     ; do
         set_config "CONFIG_PACKAGE_${kmod}" y
     done
 
     # 6.3 Docker 相关软件包
-    #     说明：
-    #       - docker / dockerd 是核心
-    #       - docker-compose 便于编排
-    #       - luci-app-dockerman + 中文语言包 提供 Web 管理界面
     for pkg in \
         docker \
         dockerd \
