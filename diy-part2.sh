@@ -129,17 +129,20 @@ if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
     }
 
     # 6.1 内核功能开关
+    #     只保留最核心的选项，其他依赖由 6.2 里的 kmod 包自动拉入
     set_config CONFIG_KERNEL_CGROUPS           y
     set_config CONFIG_KERNEL_NAMESPACES        y
     set_config CONFIG_KERNEL_CGROUP_DEVICE     y
     set_config CONFIG_KERNEL_MEMCG             y
+    set_config CONFIG_KERNEL_CGROUP_FREEZER    y
+    set_config CONFIG_KERNEL_CGROUP_PIDS       y
     set_config CONFIG_KERNEL_VETH              y
     set_config CONFIG_KERNEL_BRIDGE            y
     set_config CONFIG_KERNEL_OVERLAY_FS        y
 
     # 6.2 内核模块（kmod）
+    #     必须编译时选上，后期在线安装 kmod 极易因内核版本不匹配而失败
     #     注意：续行列表里不能夹注释，否则会破坏续行符
-    #     如需 btrfs 存储驱动，直接在列表末尾加 kmod-fs-btrfs \
     for kmod in \
         kmod-veth \
         kmod-ipt-nat \
@@ -154,18 +157,22 @@ if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
         set_config "CONFIG_PACKAGE_${kmod}" y
     done
 
-    # 6.3 Docker 相关软件包
-    for pkg in \
-        docker \
-        dockerd \
-        docker-compose \
-        luci-app-dockerman \
-        luci-i18n-dockerman-zh-cn \
-    ; do
-        set_config "CONFIG_PACKAGE_${pkg}" y
-    done
+    # 6.3 Docker 用户态软件包
+    #     这些是纯用户态程序，后期可以在线安装：
+    #       apk add docker dockerd docker-compose luci-app-dockerman luci-i18n-dockerman-zh-cn
+    #     如需在固件里预装，取消下面这段的注释
+    #
+    # for pkg in \
+    #     docker \
+    #     dockerd \
+    #     docker-compose \
+    #     luci-app-dockerman \
+    #     luci-i18n-dockerman-zh-cn \
+    # ; do
+    #     set_config "CONFIG_PACKAGE_${pkg}" y
+    # done
 
-    echo "Docker 支持配置完成。"
+    echo "Docker 支持配置完成（6.3 用户态软件未预装，可后期在线安装）。"
 else
     echo "Docker 支持未启用（DOCKER_ENABLED=${DOCKER_ENABLED:-false}），跳过第 6 段。"
 fi
