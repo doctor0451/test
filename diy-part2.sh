@@ -142,17 +142,22 @@ if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
 
     # 6.2 内核模块（kmod）
     #     必须编译时选上，后期在线安装 kmod 极易因内核版本不匹配而失败
+    #     说明：
+    #       - kmod-ipt-extra ：iptables-mod-extra 的依赖，被 Docker 网络相关包间接拉入
+    #       - kmod-fs-btrfs  ：btrfs-progs 的依赖，部分存储相关包会用到
     #     注意：续行列表里不能夹注释，否则会破坏续行符
     for kmod in \
         kmod-veth \
         kmod-ipt-nat \
         kmod-ipt-nat6 \
         kmod-ipt-physdev \
+        kmod-ipt-extra \
         kmod-nf-ipvs \
         kmod-br-netfilter \
         kmod-nft-compat \
         kmod-dm \
         kmod-fs-ext4 \
+        kmod-fs-btrfs \
     ; do
         set_config "CONFIG_PACKAGE_${kmod}" y
     done
