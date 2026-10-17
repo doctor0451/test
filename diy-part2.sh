@@ -19,7 +19,7 @@
 # sed -i 's/OpenWrt/XG-040G-MD/g' package/base-files/files/bin/config_generate
 
 # ============================================================
-# 3. 只保留 XG-040G-MD 和 HG5585F-CT 两个机型，关闭其余所有 an7581 设备
+# 3. 只保留 XG-040G-MD、HG5585F-CT和H3C HM2004-DU 仨个机型，关闭其余所有 an7581 设备
 #    采用白名单方式：先关闭全部，再打开指定机型，避免源仓库新增机型被误编译
 #    执行时机：make defconfig 之前，.config 为原始格式，sed 可精确匹配
 # ============================================================
@@ -35,6 +35,10 @@ sed -i 's/^# CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_nokia_xg-040g-md
 # 3.3 打开 HG5585F-CT（基础机型，不含 -usb-sfp 变体）
 sed -i 's/^# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_fiberhome_hg5585f-ct is not set/CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_fiberhome_hg5585f-ct=y/' .config
 sed -i 's/^# CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_fiberhome_hg5585f-ct is not set/CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_fiberhome_hg5585f-ct=""/' .config
+
+# 👇 3.4 新增：打开 H3C HM2004-DU
+sed -i 's/^# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du is not set/CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du=y/' .config
+sed -i 's/^# CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_h3c_hm2004-du is not set/CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_h3c_hm2004-du=""/' .config
 
 # ============================================================
 # 4. 选中 luci-app-airoha-npu
@@ -260,4 +264,4 @@ else
     echo "U盘驱动与Samba4未启用（USB_STORAGE_ENABLED=${USB_STORAGE_ENABLED:-true}），跳过第 7 段。"
 fi
 
-echo "diy-part2.sh done: 仅保留 nokia_xg-040g-md-ubi 和 fiberhome_hg5585f-ct，选中 luci-app-airoha-npu，集成自定义 apk；Docker 可选；U盘驱动+Samba4 默认启用。"
+echo "diy-part2.sh done: 仅保留 XG-040G-MD、HG5585F-CT和H3C HM2004-DU 仨个机型，选中 luci-app-airoha-npu，集成自定义 apk；Docker 可选；U盘驱动+Samba4 默认启用。"
