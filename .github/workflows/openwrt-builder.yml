@@ -16,10 +16,15 @@ on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
-      enable_docker:                 # ←新增：云编译时可勾选的 Docker 开关
+      enable_docker:                 # 👈 新增：云编译时可勾选的 Docker 开关
         description: '启用 Docker 支持'
         required: false
         default: false
+        type: boolean
+      enable_usb_storage:            # 👈 新增：云编译时可勾选的 U盘驱动/Samba4 开关（默认启用）
+        description: '启用U盘驱动与Samba4支持'
+        required: false
+        default: true
         type: boolean
 
 env:
@@ -33,13 +38,14 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  FIRMWARE_PREFIX: PonWrt_firmware_EN758X-ubi    # ←新增：固件/Artifact 名称前缀
-  DOCKER_ENABLED: ${{ github.event.inputs.enable_docker || 'false' }}   # ←新增：导出开关为环境变量
+  FIRMWARE_PREFIX: PonWrt_firmware_EN758X-ubi    # 👈 新增：固件/Artifact 名称前缀
+  DOCKER_ENABLED: ${{ github.event.inputs.enable_docker || 'false' }}   # 👈 新增：导出开关为环境变量
+  USB_STORAGE_ENABLED: ${{ github.event.inputs.enable_usb_storage || 'true' }}   # 👈 新增：U盘/Samba4 开关，默认启用
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    permissions:  # ←新增这一行
+    permissions:  # 👈 新增这一行
       actions: write      # 👈 新增这一行，允许删除旧 workflow run 记录（解决这个报错的关键）
       contents: write        # 👈 新增这一行，允许创建 Release、上传固件
 
