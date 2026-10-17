@@ -108,11 +108,13 @@ fi
 
 # ============================================================
 # 6. 启用 Docker 支持（云编译时可选）
-#    是否执行由 workflow_dispatch 的 enable_docker 开关控制
-#    对应环境变量：DOCKER_ENABLED = true / false
+#    只有 DOCKER_ENABLED=true 时，才同时启用：
+#      - Docker 所需内核功能与 kmod
+#      - Samba4（samba4-server + LuCI）
+#      - NTFS 读写驱动（kmod-fs-ntfs3，用于挂载 NTFS U 盘）
 # ============================================================
 if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
-    echo "Docker 支持已启用，开始配置..."
+    echo "Docker 支持已启用，开始配置 Docker + Samba4 + NTFS..."
 
     # 辅助函数：设置 .config 中某项为指定值
     # 兼容三种情况：已存在、已注释、不存在
@@ -128,25 +130,24 @@ if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
         fi
     }
 
-    # 6.1 内核功能开关
-    #     只保留最核心的选项，其他依赖由 6.2 里的 kmod 包自动拉入
-    set_config CONFIG_KERNEL_CGROUPS           y
-    set_config CONFIG_KERNEL_NAMESPACES        y
-    set_config CONFIG_KERNEL_CGROUP_DEVICE     y
-    set_config CONFIG_KERNEL_MEMCG             y
-    set_config CONFIG_KERNEL_CGROUP_FREEZER    y
-    set_config CONFIG_KERNEL_CGROUP_PIDS       y
-    set_config CONFIG_KERNEL_VETH              y
-    set_config CONFIG_KERNEL_BRIDGE            y
-    set_config CONFIG_KERNEL_OVERLAY_FS        y
+    # 6.1 内核功能开关（Docker 所需内核特性 + NTFS 内核态驱动）
+    #     内核 6.18 使用内核态 ntfs3，无需用户态 ntfs-3g
+    for kopt in \
+        CONFIG_KERNEL_CGROUPS \
+        CONFIG_KERNEL_NAMESPACES \
+        CONFIG_KERNEL_CGROUP_DEVICE \
+        CONFIG_KERNEL_MEMCG \
+        CONFIG_KERNEL_CGROUP_FREEZER \
+        CONFIG_KERNEL_CGROUP_PIDS \
+        CONFIG_KERNEL_VETH \
+        CONFIG_KERNEL_BRIDGE \
+        CONFIG_KERNEL_OVERLAY_FS \
+    ; do
+        set_config "$kopt" y
+    done
 
-    # 6.2 内核模块（kmod）
-    #     必须编译时选上，后期在线安装 kmod 极易因内核版本不匹配而失败
-    #     说明：
-    #       - kmod-ipt-extra ：iptables-mod-extra 的依赖，被 Docker 网络相关包间接拉入
-    #       - kmod-fs-btrfs  ：btrfs-progs 的依赖，部分存储相关包会用到
-    #     注意：续行列表里不能夹注释，否则会破坏续行符
-    for kmod in \
+    # 6.2 软件包选择（Docker kmod + Samba4 + NTFS）
+    for pkg in \
         kmod-veth \
         kmod-ipt-nat \
         kmod-ipt-nat6 \
@@ -158,28 +159,16 @@ if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
         kmod-dm \
         kmod-fs-ext4 \
         kmod-fs-btrfs \
+        kmod-fs-ntfs3 \
+        samba4-server \
+        luci-app-samba4 \
     ; do
-        set_config "CONFIG_PACKAGE_${kmod}" y
+        set_config "CONFIG_PACKAGE_${pkg}" y
     done
 
-    # 6.3 Docker 用户态软件包
-    #     这些是纯用户态程序，后期可以在线安装：
-    #       apk add docker dockerd docker-compose luci-app-dockerman luci-i18n-dockerman-zh-cn
-    #     如需在固件里预装，取消下面这段的注释
-    #
-    # for pkg in \
-    #     docker \
-    #     dockerd \
-    #     docker-compose \
-    #     luci-app-dockerman \
-    #     luci-i18n-dockerman-zh-cn \
-    # ; do
-    #     set_config "CONFIG_PACKAGE_${pkg}" y
-    # done
-
-    echo "Docker 支持配置完成（6.3 用户态软件未预装，可后期在线安装）。"
+    echo "Docker + Samba4 + NTFS 配置完成。"
 else
-    echo "Docker 支持未启用（DOCKER_ENABLED=${DOCKER_ENABLED:-false}），跳过第 6 段。"
+    echo "Docker 支持未启用（DOCKER_ENABLED=${DOCKER_ENABLED:-false}），跳过第 6 段（不启用 Docker/Samba4/NTFS）。"
 fi
 
-echo "diy-part2.sh done: 仅保留 nokia_xg-040g-md-ubi 和 fiberhome_hg5585f-ct，选中 luci-app-airoha-npu，集成自定义 apk，Docker 可选。"
+echo "diy-part2.sh done: 仅保留 nokia_xg-040g-md-ubi 和 fiberhome_hg5585f-ct，选中 luci-app-airoha-npu，集成自定义 apk；Docker/Samba4/NTFS 仅在 DOCKER_ENABLED=true 时启用。"
