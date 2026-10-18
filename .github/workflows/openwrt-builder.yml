@@ -38,7 +38,7 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  FIRMWARE_PREFIX: PonWrt_firmware_EN758X-ubi    # 👈 新增：固件/Artifact 名称前缀
+  # 👈 修改：移除硬编码的 FIRMWARE_PREFIX，改为在后续步骤中动态生成
   DOCKER_ENABLED: ${{ github.event.inputs.enable_docker || 'false' }}   # 👈 新增：导出开关为环境变量
   USB_STORAGE_ENABLED: ${{ github.event.inputs.enable_usb_storage || 'true' }}   # 👈 新增：U盘/Samba4 开关，默认启用
 
@@ -99,6 +99,21 @@ jobs:
         chmod +x $DIY_P2_SH
         cd ponwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
+
+        # 👈 新增：动态拼接固件前缀，根据是否勾选 Docker 决定
+        PREFIX="PonWrt_EN758X-ubi"
+        if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
+          PREFIX="${PREFIX}_docker"
+        fi
+        echo "FIRMWARE_PREFIX=${PREFIX}" >> $GITHUB_ENV
+
+        # 👈 新增：覆写源码根目录的 README.md，记录本次编译选项
+        echo "# 固件编译信息" > README.md
+        echo "编译时间: $(date +"%Y-%m-%d %H:%M:%S")" >> README.md
+        echo "" >> README.md
+        echo "## 编译选项" >> README.md
+        echo "- **Docker 支持**: $([ "${DOCKER_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> README.md
+        echo "- **U盘驱动与Samba4支持**: $([ "${USB_STORAGE_ENABLED:-true}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> README.md
 
     - name: Download package
       id: package
@@ -164,8 +179,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        # Artifact 名称改为固定前缀 PonWrt_firmware_EN758X-ubi + 时间戳
-        # 原来为：OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        # Artifact 名称改为固定前缀 PonWrt_EN758X-ubi (+ _docker) + 时间戳
         name: ${{ env.FIRMWARE_PREFIX }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
@@ -175,7 +189,10 @@ jobs:
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
-        [ ${UPLOAD_GOFILE} = true && ${{ steps.gofile.outputs.url }} ] && echo "🔗 [GoFile](${{ steps.gofile.outputs.url }})" >> release.txt
+        # 👈 将编译选项同步写入 release 描述里
+        echo "## 编译选项" > release.txt
+        echo "- **Docker 支持**: $([ "${DOCKER_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
+        echo "- **U盘驱动与Samba4**: $([ "${USB_STORAGE_ENABLED:-true}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
@@ -192,19 +209,19 @@ jobs:
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
       with:
-        retain_days: 30 # 👈 保留编译成果天数
-        keep_minimum_runs: 10 # 👈 最多保留历史数+当前编译=10个
+        retain_days: 15 # 👈 保留编译成果天数 (修改为 15 天)
+        keep_minimum_runs: 9 # 👈 最多保留历史数+当前编译=10个
 
     - name: Remove old Releases
       uses: dev-drprasad/delete-older-releases@v0.2.0
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
-        keep_latest: 10          # 👈 保留最近10个正式release
-        delete_tags: true        # 👈 可以删除旧版本
+        keep_latest: 10  #保留最近10个正式release
+        delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Delete all Draft releases    # 👈 可以删除草稿
+    - name: Delete all Draft releases
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         gh release list --draft --json id | jq -r '.[] | .id' | while read -r id; do
@@ -212,4 +229,3 @@ jobs:
         done
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
