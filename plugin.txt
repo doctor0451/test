@@ -1,16 +1,18 @@
-插件：
+luci插件：
 #rtp2httpd
 vlmcsd
 ddns-go
+ttyd
+adguardhome
+#samba4
+
+插件：
 htop
 iperf3
 dhrystone
 coremark
-ttyd
 btop
 usteer
-#samba4
-adguardhome
 #autocore
 
 
