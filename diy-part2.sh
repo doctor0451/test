@@ -132,6 +132,59 @@ set_config() {
 }
 
 # ============================================================
+# 5.5 启用 plugin.txt 中的插件与主题（云编译时可选）
+#     是否执行由 workflow_dispatch 的 enable_plugins 开关控制
+#     对应环境变量：PLUGINS_ENABLED = true / false
+# ============================================================
+if [ "${PLUGINS_ENABLED:-false}" = "true" ]; then
+    echo "插件与主题支持已启用，开始配置..."
+    if [ -f "$GITHUB_WORKSPACE/plugin.txt" ]; then
+        in_themes_section=false
+        # 逐行读取 plugin.txt
+        while IFS= read -r line || [ -n "$line" ]; do
+            # 去除回车符和首尾空格
+            line=$(echo "$line" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            
+            # 跳过空行
+            [ -z "$line" ] && continue
+            
+            # 判断分类
+            if [[ "$line" == *"插件："* ]]; then
+                in_themes_section=false
+                continue
+            elif [[ "$line" == *"主题："* ]]; then
+                in_themes_section=true
+                continue
+            fi
+            
+            # 跳过以 # 开头的注释行
+            if [[ "$line" == "#"* ]]; then
+                continue
+            fi
+            
+            pkg_name="$line"
+            
+            # 特殊处理主题名称
+            if [ "$in_themes_section" = true ]; then
+                if [ "$pkg_name" = "Argon" ]; then
+                    pkg_name="luci-theme-argon"
+                elif [ "$pkg_name" = "Bootstrap" ]; then
+                    pkg_name="luci-theme-bootstrap"
+                fi
+            fi
+            
+            echo "选中: $pkg_name"
+            set_config "CONFIG_PACKAGE_${pkg_name}" y
+        done < "$GITHUB_WORKSPACE/plugin.txt"
+        echo "插件与主题配置完成。"
+    else
+        echo "未找到 plugin.txt，跳过。"
+    fi
+else
+    echo "插件与主题支持未启用（PLUGINS_ENABLED=${PLUGINS_ENABLED:-false}），跳过。"
+fi
+
+# ============================================================
 # 6. 启用 Docker 支持（云编译时可选）
 #    是否执行由 workflow_dispatch 的 enable_docker 开关控制
 #    对应环境变量：DOCKER_ENABLED = true / false
@@ -268,4 +321,4 @@ else
     echo "U盘驱动与Samba4未启用（USB_STORAGE_ENABLED=${USB_STORAGE_ENABLED:-true}），跳过第 7 段。"
 fi
 
-echo "diy-part2.sh done: 仅保留 XG-040G-MD、HG5585F-CT和H3C HM2004-DU 仨个机型，选中 luci-app-airoha-npu，集成自定义 apk；Docker 可选；U盘驱动+Samba4 默认启用。"
+echo "diy-part2.sh done: 仅保留 XG-040G-MD、HG5585F-CT和H3C HM2004-DU 仨个机型，选中 luci-app-airoha-npu，集成自定义 apk；插件/主题可选；Docker 可选；U盘驱动+Samba4 默认启用。"
