@@ -192,7 +192,7 @@ jobs:
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
       with:
-        retain_days: 30 # 👈 保留编译成果天数
+        retain_days: 10 # 👈 保留编译成果天数
         keep_minimum_runs: 10 # 👈 最多保留历史数+当前编译=10个
 
     - name: Cleanup releases and drafts
@@ -204,5 +204,14 @@ jobs:
         release-drop-tag: true      # 👈 删除对应的标签
         draft-drop: true
         draft-drop-count: 0         # 👈 0表示不保留草稿（全部清理）
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Remove old Releases
+      uses: dev-drprasad/delete-older-releases@master
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        keep_latest: 5 # 👈 保留编译代码的个数
+        delete_tags: true # 👈 可以删除旧版本        
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
