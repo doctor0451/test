@@ -16,6 +16,11 @@ on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
+      enable_plugins:                # 👈 新增：云编译时可勾选的插件/主题开关
+        description: '安装 plugin.txt 中的插件和主题'
+        required: false
+        default: false
+        type: boolean
       enable_docker:                 # 👈 新增：云编译时可勾选的 Docker 开关
         description: '启用 Docker 支持'
         required: false
@@ -39,8 +44,11 @@ env:
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
   # 👈 修改：移除硬编码的 FIRMWARE_PREFIX，改为在后续步骤中动态生成
+  PLUGINS_ENABLED: ${{ github.event.inputs.enable_plugins || 'false' }}   # 👈 新增：导出开关为环境变量
   DOCKER_ENABLED: ${{ github.event.inputs.enable_docker || 'false' }}   # 👈 新增：导出开关为环境变量
   USB_STORAGE_ENABLED: ${{ github.event.inputs.enable_usb_storage || 'true' }}   # 👈 新增：U盘/Samba4 开关，默认启用
+  KEEP_WORKFLOW_RUNS: 10         # 👈 新增：保留 Actions 运行记录的数量
+  KEEP_RELEASES: 10              # 👈 新增：保留 Releases 版本的数量
 
 jobs:
   build:
@@ -64,6 +72,7 @@ jobs:
         编译时间: $(date +"%Y-%m-%d %H:%M:%S")
 
         编译选项:
+        - 安装插件与主题: $([ "${PLUGINS_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
         - Docker 支持: $([ "${DOCKER_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
         - U盘驱动与Samba4支持: $([ "${USB_STORAGE_ENABLED:-true}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
         EOF
@@ -113,6 +122,8 @@ jobs:
     - name: Load custom configuration
       run: |
         [ -e files ] && mv files ponwrt/files
+        # 👈 新增：将根目录的 plugin.txt 移入工作区，供 diy-part2.sh 读取
+        [ -e plugin.txt ] && cp plugin.txt ponwrt/plugin.txt
         cp ponwrt/$CONFIG_FILE ponwrt/.config
         chmod +x $DIY_P2_SH
         cd ponwrt
@@ -201,6 +212,7 @@ jobs:
         touch release.txt
         # 👈 将编译选项同步写入 release 描述里
         echo "## 编译选项" > release.txt
+        echo "- **插件与主题**: $([ "${PLUGINS_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
         echo "- **Docker 支持**: $([ "${DOCKER_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
         echo "- **U盘驱动与Samba4**: $([ "${USB_STORAGE_ENABLED:-true}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
@@ -220,7 +232,18 @@ jobs:
       uses: Mattraks/delete-workflow-runs@main
       with:
         retain_days: 15 # 👈 保留编译成果天数 (修改为15天)
-        keep_minimum_runs: 9 # 👈 最多保留历史数+当前编译=10个
+        keep_minimum_runs: ${{ env.KEEP_WORKFLOW_RUNS }} # 👈 修改：使用环境变量
+
+    # 👈 新增：官方 CLI 兜底强制清理 Workflow runs，解决第三方 action 删不干净的问题
+    - name: Force Cleanup Workflow Runs (Backup)
+      if: always()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # 保留最新的 ${{ env.KEEP_WORKFLOW_RUNS }} 个运行记录，其余强制删除
+        gh run list --limit 100 --json databaseId --jq '.[].databaseId' | tail -n +$(( ${{ env.KEEP_WORKFLOW_RUNS }} + 1 )) | while read -r id; do
+          gh run delete "$id" || true
+        done
 
     # 👈 修改：合并清理逻辑，使用 GitHub 官方 gh cli 彻底清理草稿和旧版本
     - name: Cleanup old Releases and Drafts
@@ -237,9 +260,9 @@ jobs:
           fi
         done
 
-        # 2. 清理旧版本，只保留最新 10 个已发布的 Release
+        # 2. 清理旧版本，只保留最新 ${{ env.KEEP_RELEASES }} 个已发布的 Release
         echo "=== 正在清理旧版本 ==="
-        gh release list --exclude-drafts --limit 100 --json tagName --jq '.[10:] | .[].tagName' | while read -r tag; do
+        gh release list --exclude-drafts --limit 100 --json tagName --jq ".[${{ env.KEEP_RELEASES }}:] | .[].tagName" | while read -r tag; do
           if [ -n "$tag" ]; then
             echo "删除旧版本: $tag"
             gh release delete "$tag" --yes --cleanup-tag || true
