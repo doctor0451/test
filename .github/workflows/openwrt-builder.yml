@@ -55,6 +55,24 @@ jobs:
       with:
         fetch-depth: 0      # 拉取完整提交历史，供 autocore 按提交时间比较使用
 
+    # 👈 新增：在编译前生成并推送“编制说明.txt”到仓库，这样 GitHub 自动打包的 Source code 就会包含它
+    - name: Generate and Commit 编制说明.txt
+      run: |
+        cat > 编制说明.txt << EOF
+        固件编译说明
+        ================================
+        编译时间: $(date +"%Y-%m-%d %H:%M:%S")
+
+        编译选项:
+        - Docker 支持: $([ "${DOCKER_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
+        - U盘驱动与Samba4支持: $([ "${USB_STORAGE_ENABLED:-true}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
+        EOF
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add 编制说明.txt
+        git commit -m "Auto-update 编制说明.txt [skip ci]" || true
+        git push origin HEAD:${{ github.ref_name }} || true
+
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -106,14 +124,6 @@ jobs:
           PREFIX="${PREFIX}_docker"
         fi
         echo "FIRMWARE_PREFIX=${PREFIX}" >> $GITHUB_ENV
-
-        # 👈 新增：覆写源码根目录的 README.md，记录本次编译选项
-        echo "# 固件编译信息" > README.md
-        echo "编译时间: $(date +"%Y-%m-%d %H:%M:%S")" >> README.md
-        echo "" >> README.md
-        echo "## 编译选项" >> README.md
-        echo "- **Docker 支持**: $([ "${DOCKER_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> README.md
-        echo "- **U盘驱动与Samba4支持**: $([ "${USB_STORAGE_ENABLED:-true}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> README.md
 
     - name: Download package
       id: package
@@ -209,23 +219,29 @@ jobs:
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
       with:
-        retain_days: 15 # 👈 保留编译成果天数 (修改为 15 天)
+        retain_days: 15 # 👈 保留编译成果天数 (修改为15天)
         keep_minimum_runs: 9 # 👈 最多保留历史数+当前编译=10个
 
-    - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@v0.2.0
+    # 👈 修改：合并清理逻辑，使用 GitHub 官方 gh cli 彻底清理草稿和旧版本
+    - name: Cleanup old Releases and Drafts
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-      with:
-        keep_latest: 10  # 👈 保留最近10个正式release
-        delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Delete all Draft releases
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        gh release list --draft --json id | jq -r '.[] | .id' | while read -r id; do
-          gh release delete "$id" --yes
+        # 1. 彻底清理所有草稿 (Drafts)
+        echo "=== 正在清理所有草稿 ==="
+        gh release list --draft --limit 100 --json tagName --jq '.[].tagName' | while read -r tag; do
+          if [ -n "$tag" ]; then
+            echo "删除草稿: $tag"
+            gh release delete "$tag" --yes --cleanup-tag || true
+          fi
         done
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+        # 2. 清理旧版本，只保留最新 10 个已发布的 Release
+        echo "=== 正在清理旧版本 ==="
+        gh release list --exclude-drafts --limit 100 --json tagName --jq '.[10:] | .[].tagName' | while read -r tag; do
+          if [ -n "$tag" ]; then
+            echo "删除旧版本: $tag"
+            gh release delete "$tag" --yes --cleanup-tag || true
+          fi
+        done
