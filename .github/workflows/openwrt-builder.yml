@@ -192,7 +192,7 @@ jobs:
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
       with:
-        retain_days: 10 # 👈 保留编译成果天数
+        retain_days: 30 # 👈 保留编译成果天数
         keep_minimum_runs: 10 # 👈 最多保留历史数+当前编译=10个
 
     - name: Remove old Releases
