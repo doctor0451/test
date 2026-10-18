@@ -55,6 +55,7 @@ env:
   USB_STORAGE_ENABLED: ${{ github.event.inputs.enable_usb_storage || 'true' }}   # 👈 新增：U盘/Samba4 开关，默认启用
   KEEP_WORKFLOW_RUNS: 10         # 👈 新增：保留 Actions 运行记录的数量
   KEEP_RELEASES: 10              # 👈 新增：保留 Releases 版本的数量
+  KEEP_DAYS: 20                  # 👈 新增：保留天数的统一参数 (替代原 retain_days)
 
 jobs:
   build:
@@ -240,24 +241,28 @@ jobs:
         # 直接用固定路径，避免 env.FIRMWARE 意外为空时把 /* 展开到根目录
         files: /tmp/firmware-release/*
 
-    - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@main
-      with:
-        retain_days: 15 # 👈 保留编译成果天数 (修改为15天)
-        keep_minimum_runs: ${{ env.KEEP_WORKFLOW_RUNS }} # 👈 修改：使用环境变量
-
-    # 👈 新增：官方 CLI 兜底强制清理 Workflow runs，解决第三方 action 删不干净的问题
-    - name: Force Cleanup Workflow Runs (Backup)
+    # 👈 修改：完全替代 Mattraks，用 gh 原生实现"保留天数+数量"双重条件的强制清理
+    - name: Cleanup Workflow Runs
       if: always()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 保留最新的 ${{ env.KEEP_WORKFLOW_RUNS }} 个运行记录，其余强制删除
-        gh run list --limit 100 --json databaseId --jq '.[].databaseId' | tail -n +$(( ${{ env.KEEP_WORKFLOW_RUNS }} + 1 )) | while read -r id; do
-          gh run delete "$id" || true
+        echo "=== 正在清理 Actions 运行记录 (保留最新 ${{ env.KEEP_WORKFLOW_RUNS }} 个且 ${{ env.KEEP_DAYS }} 天内) ==="
+        CUTOFF_ISO=$(date -u -d "${{ env.KEEP_DAYS }} days ago" +%Y-%m-%dT%H:%M:%SZ)
+        # 获取列表，倒序排，跳过前 N 个（保护最新的），在剩下的里面只挑出早于设定天数的进行删除
+        gh run list --limit 100 --json databaseId,createdAt --jq "
+          (sort_by(.createdAt) | reverse) as \$sorted |
+          \$sorted[ ${{ env.KEEP_WORKFLOW_RUNS }}: ] | 
+          map(select(.createdAt < \"$CUTOFF_ISO\")) | 
+          .[].databaseId
+        " | while read -r id; do
+          if [ -n "$id" ]; then
+            echo "强制删除运行记录: $id"
+            gh run delete "$id" || true
+          fi
         done
 
-    # 👈 修改：合并清理逻辑，使用 GitHub 官方 gh cli 彻底清理草稿和旧版本
+    # 👈 修改：增加"保留天数"逻辑，同时清理草稿和旧版本
     - name: Cleanup old Releases and Drafts
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       env:
@@ -272,9 +277,15 @@ jobs:
           fi
         done
 
-        # 2. 清理旧版本，只保留最新 ${{ env.KEEP_RELEASES }} 个已发布的 Release
-        echo "=== 正在清理旧版本 ==="
-        gh release list --exclude-drafts --limit 100 --json tagName --jq ".[${{ env.KEEP_RELEASES }}:] | .[].tagName" | while read -r tag; do
+        # 2. 清理旧版本 (保留最新 N 个且 M 天内)
+        echo "=== 正在清理旧版本 (保留最新 ${{ env.KEEP_RELEASES }} 个且 ${{ env.KEEP_DAYS }} 天内) ==="
+        CUTOFF_ISO=$(date -u -d "${{ env.KEEP_DAYS }} days ago" +%Y-%m-%dT%H:%M:%SZ)
+        gh release list --exclude-drafts --limit 100 --json tagName,createdAt --jq "
+          (sort_by(.createdAt) | reverse) as \$sorted |
+          \$sorted[ ${{ env.KEEP_RELEASES }}: ] | 
+          map(select(.createdAt < \"$CUTOFF_ISO\")) | 
+          .[].tagName
+        " | while read -r tag; do
           if [ -n "$tag" ]; then
             echo "删除旧版本: $tag"
             gh release delete "$tag" --yes --cleanup-tag || true
