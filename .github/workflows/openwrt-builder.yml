@@ -207,11 +207,3 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@master
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-      with:
-        keep_latest: 5 # 👈 保留编译代码的个数
-        delete_tags: true # 👈 可以删除旧版本        
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
