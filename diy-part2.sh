@@ -115,9 +115,9 @@ else
 fi
 
 # ============================================================
-# 第6、7段共用：辅助函数 set_config
+# 第6、7、8段共用：辅助函数 set_config
 # 兼容三种情况：已存在、已注释、不存在
-# 说明：原第6段内部定义，现移到此处供第6、7段共用
+# 说明：原第6段内部定义，现移到此处供第6、7、8段共用
 # ============================================================
 set_config() {
     local key="$1"
@@ -139,7 +139,7 @@ set_config() {
 if [ "${PLUGINS_ENABLED:-false}" = "true" ]; then
     echo "插件与主题支持已启用，开始配置..."
     if [ -f "$GITHUB_WORKSPACE/plugin.txt" ]; then
-        in_themes_section=false
+        current_section=""
         # 逐行读取 plugin.txt
         while IFS= read -r line || [ -n "$line" ]; do
             # 去除回车符和首尾空格
@@ -148,12 +148,15 @@ if [ "${PLUGINS_ENABLED:-false}" = "true" ]; then
             # 跳过空行
             [ -z "$line" ] && continue
             
-            # 判断分类
-            if [[ "$line" == *"插件："* ]]; then
-                in_themes_section=false
+            # 👈 修改：判断分类，支持 3 个类别
+            if [[ "$line" == *"luci插件："* ]]; then
+                current_section="luci"
+                continue
+            elif [[ "$line" == *"插件："* ]]; then
+                current_section="pkg"
                 continue
             elif [[ "$line" == *"主题："* ]]; then
-                in_themes_section=true
+                current_section="theme"
                 continue
             fi
             
@@ -164,17 +167,30 @@ if [ "${PLUGINS_ENABLED:-false}" = "true" ]; then
             
             pkg_name="$line"
             
-            # 特殊处理主题名称
-            if [ "$in_themes_section" = true ]; then
+            # 根据分类处理
+            if [ "$current_section" = "theme" ]; then
+                # 特殊处理主题名称
                 if [ "$pkg_name" = "Argon" ]; then
                     pkg_name="luci-theme-argon"
                 elif [ "$pkg_name" = "Bootstrap" ]; then
                     pkg_name="luci-theme-bootstrap"
                 fi
+                echo "选中主题: $pkg_name"
+                set_config "CONFIG_PACKAGE_${pkg_name}" y
+            elif [ "$current_section" = "luci" ]; then
+                # 👈 修改：如果是 luci 插件，自动判断并加上 luci-app- 前缀
+                if [[ "$pkg_name" != luci-app-* ]]; then
+                    echo "选中LuCI插件: luci-app-${pkg_name}"
+                    set_config "CONFIG_PACKAGE_luci-app-${pkg_name}" y
+                    set_config "CONFIG_PACKAGE_${pkg_name}" y # 顺便选上主程序，避免依赖丢失
+                else
+                    echo "选中LuCI插件: $pkg_name"
+                    set_config "CONFIG_PACKAGE_${pkg_name}" y
+                fi
+            elif [ "$current_section" = "pkg" ]; then
+                echo "选中插件: $pkg_name"
+                set_config "CONFIG_PACKAGE_${pkg_name}" y
             fi
-            
-            echo "选中: $pkg_name"
-            set_config "CONFIG_PACKAGE_${pkg_name}" y
         done < "$GITHUB_WORKSPACE/plugin.txt"
         echo "插件与主题配置完成。"
     else
@@ -185,12 +201,12 @@ else
 fi
 
 # ============================================================
-# 6. 启用 Docker 支持（云编译时可选）
-#    是否执行由 workflow_dispatch 的 enable_docker 开关控制
-#    对应环境变量：DOCKER_ENABLED = true / false
+# 6. 启用 Docker 内核支持（云编译时可选）
+#    是否执行由 workflow_dispatch 的 enable_docker_kernel 开关控制
+#    对应环境变量：DOCKER_KERNEL_ENABLED = true / false
 # ============================================================
-if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
-    echo "Docker 支持已启用，开始配置..."
+if [ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ]; then
+    echo "Docker 内核支持已启用，开始配置..."
 
     # 6.1 内核功能开关
     #     只保留最核心的选项，其他依赖由 6.2 里的 kmod 包自动拉入
@@ -203,12 +219,14 @@ if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
     set_config CONFIG_KERNEL_VETH              y
     set_config CONFIG_KERNEL_BRIDGE            y
     set_config CONFIG_KERNEL_OVERLAY_FS        y
+    set_config CONFIG_KERNEL_IPVLAN            y  # 👈 新增：增加 ipvlan 功能模块
 
     # 6.2 内核模块（kmod）
     #     必须编译时选上，后期在线安装 kmod 极易因内核版本不匹配而失败
     #     说明：
     #       - kmod-ipt-extra ：iptables-mod-extra 的依赖，被 Docker 网络相关包间接拉入
     #       - kmod-fs-btrfs  ：btrfs-progs 的依赖，部分存储相关包会用到
+    #       - kmod-ipvlan    ：Docker macvlan/ipvlan 网络需要
     #     注意：续行列表里不能夹注释，否则会破坏续行符
     for kmod in \
         kmod-veth \
@@ -222,32 +240,42 @@ if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
         kmod-dm \
         kmod-fs-ext4 \
         kmod-fs-btrfs \
+        kmod-ipvlan \
     ; do
         set_config "CONFIG_PACKAGE_${kmod}" y
     done
 
-    # 6.3 Docker 用户态软件包
-    #     这些是纯用户态程序，后期可以在线安装：
-    #       apk add docker dockerd docker-compose luci-app-dockerman luci-i18n-dockerman-zh-cn
-    #     如需在固件里预装，取消下面这段的注释
-    #
-    # for pkg in \
-    #     docker \
-    #     dockerd \
-    #     docker-compose \
-    #     luci-app-dockerman \
-    #     luci-i18n-dockerman-zh-cn \
-    # ; do
-    #     set_config "CONFIG_PACKAGE_${pkg}" y
-    # done
-
-    echo "Docker 支持配置完成（6.3 用户态软件未预装，可后期在线安装）。"
+    echo "Docker 内核支持配置完成。"
 else
-    echo "Docker 支持未启用（DOCKER_ENABLED=${DOCKER_ENABLED:-false}），跳过第 6 段。"
+    echo "Docker 内核支持未启用（DOCKER_KERNEL_ENABLED=${DOCKER_KERNEL_ENABLED:-false}），跳过第 6 段。"
 fi
 
 # ============================================================
-# 7. U盘驱动 + 自动挂载 + Samba4（云编译时可开关，默认启用）
+# 7. 启用 Docker 用户态软件（云编译时可选）
+#    是否执行由 workflow_dispatch 的 enable_docker_apps 开关控制
+#    对应环境变量：DOCKER_APPS_ENABLED = true / false
+# ============================================================
+if [ "${DOCKER_APPS_ENABLED:-false}" = "true" ]; then
+    echo "Docker 用户态软件已启用，开始配置..."
+
+    # 7.1 Docker 用户态软件包
+    for pkg in \
+        docker \
+        dockerd \
+        docker-compose \
+        luci-app-dockerman \
+        luci-i18n-dockerman-zh-cn \
+    ; do
+        set_config "CONFIG_PACKAGE_${pkg}" y
+    done
+
+    echo "Docker 用户态软件配置完成。"
+else
+    echo "Docker 用户态软件未启用（DOCKER_APPS_ENABLED=${DOCKER_APPS_ENABLED:-false}），跳过第 7 段。"
+fi
+
+# ============================================================
+# 8. U盘驱动 + 自动挂载 + Samba4（云编译时可开关，默认启用）
 #    是否执行由 workflow_dispatch 的 enable_usb_storage 开关控制
 #    对应环境变量：USB_STORAGE_ENABLED = true / false（默认 true）
 #    与第6段若有重复项（如 kmod-fs-ext4），set_config 幂等设置 =y，
@@ -256,7 +284,7 @@ fi
 if [ "${USB_STORAGE_ENABLED:-true}" = "true" ]; then
     echo "U盘驱动与Samba4支持已启用，开始配置..."
 
-    # 7.1 U盘常用文件系统驱动 + 中文文件名 NLS 编码
+    # 8.1 U盘常用文件系统驱动 + 中文文件名 NLS 编码
     #     说明：
     #       - kmod-fs-vfat/msdos/exfat/ext4/f2fs/ntfs3：覆盖U盘常见格式
     #       - kmod-fs-ntfs3：内核6.18推荐的内核态NTFS驱动
@@ -276,7 +304,7 @@ if [ "${USB_STORAGE_ENABLED:-true}" = "true" ]; then
         set_config "CONFIG_PACKAGE_${kopt}" y
     done
 
-    # 7.2 U盘存储与自动挂载
+    # 8.2 U盘存储与自动挂载
     #     说明：
     #       - usb-storage/uas/extras：USB存储设备识别（U盘、移动硬盘、读卡器）
     #       - block-mount/fstools：OpenWrt挂载框架
@@ -292,13 +320,13 @@ if [ "${USB_STORAGE_ENABLED:-true}" = "true" ]; then
         set_config "CONFIG_PACKAGE_${pkg}" y
     done
 
-    # 7.3 Samba4 服务与 LuCI
+    # 8.3 Samba4 服务与 LuCI
     #     samba4-libs 是 samba4-server 的依赖，显式列出更稳妥
     set_config CONFIG_PACKAGE_samba4-server y
     set_config CONFIG_PACKAGE_samba4-libs y
     set_config CONFIG_PACKAGE_luci-app-samba4 y
 
-    # 7.4 常用用户态工具
+    # 8.4 常用用户态工具
     #     说明：
     #       - e2fsprogs：ext2/3/4 格式化/修复
     #       - dosfstools：FAT/FAT32 格式化/修复
@@ -318,7 +346,7 @@ if [ "${USB_STORAGE_ENABLED:-true}" = "true" ]; then
 
     echo "U盘驱动与Samba4配置完成。"
 else
-    echo "U盘驱动与Samba4未启用（USB_STORAGE_ENABLED=${USB_STORAGE_ENABLED:-true}），跳过第 7 段。"
+    echo "U盘驱动与Samba4未启用（USB_STORAGE_ENABLED=${USB_STORAGE_ENABLED:-true}），跳过第 8 段。"
 fi
 
-echo "diy-part2.sh done: 仅保留 XG-040G-MD、HG5585F-CT和H3C HM2004-DU 仨个机型，选中 luci-app-airoha-npu，集成自定义 apk；插件/主题可选；Docker 可选；U盘驱动+Samba4 默认启用。"
+echo "diy-part2.sh done: 仅保留 XG-040G-MD、HG5585F-CT和H3C HM2004-DU 仨个机型，选中 luci-app-airoha-npu，集成自定义 apk；插件/主题可选；Docker内核/用户态可选；U盘驱动+Samba4 默认启用。"
