@@ -195,15 +195,21 @@ jobs:
         retain_days: 10 # 👈 保留编译成果天数
         keep_minimum_runs: 10 # 👈 最多保留历史数+当前编译=10个
 
-    - name: Cleanup releases and drafts
-      uses: sgpublic/delete-release-action@v1.1
+    - name: Remove old Releases
+      uses: dev-drprasad/delete-older-releases@v0.2.0
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
-        release-drop: true
-        release-keep-count: 10      # 👈 保留最近10个正式发布
-        release-drop-tag: true      # 👈 删除对应的标签
-        draft-drop: true
-        draft-drop-count: 0         # 👈 0表示不保留草稿（全部清理）
+        keep_latest: 10          # 👈 保留最近10个正式release
+        delete_tags: true        # 👈 可以删除旧版本
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Delete all Draft releases    # 👈 可以删除草稿
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        gh release list --draft --json id | jq -r '.[] | .id' | while read -r id; do
+          gh release delete "$id" --yes
+        done
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
