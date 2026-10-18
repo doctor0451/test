@@ -37,8 +37,12 @@ sed -i 's/^# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_fiberhome_hg5585f-ct is n
 sed -i 's/^# CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_fiberhome_hg5585f-ct is not set/CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_fiberhome_hg5585f-ct=""/' .config
 
 # 👇 3.4 新增：打开 H3C HM2004-DU
+# 增加 grep -q || echo 兜底，防止原始 config 缺失该项导致 sed 失效
 sed -i 's/^# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du is not set/CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du=y/' .config
+grep -q "^CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du=" .config || echo "CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du=y" >> .config
+
 sed -i 's/^# CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_h3c_hm2004-du is not set/CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_h3c_hm2004-du=""/' .config
+grep -q "^CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_h3c_hm2004-du=" .config || echo 'CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_h3c_hm2004-du=""' >> .config
 
 # ============================================================
 # 4. 选中 luci-app-airoha-npu
