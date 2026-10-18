@@ -21,8 +21,13 @@ on:
         required: false
         default: false
         type: boolean
-      enable_docker:                 # 👈 新增：云编译时可勾选的 Docker 开关
-        description: '启用 Docker 支持'
+      enable_docker_kernel:          # 👈 修改：拆分为 Docker 内核支持
+        description: '启用 Docker 内核支持 (Cgroups/IPvlan等)'
+        required: false
+        default: false
+        type: boolean
+      enable_docker_apps:            # 👈 修改：拆分为 Docker 用户态软件
+        description: '启用 Docker 用户态软件 (dockerd等)'
         required: false
         default: false
         type: boolean
@@ -45,7 +50,8 @@ env:
   TZ: Asia/Shanghai
   # 👈 修改：移除硬编码的 FIRMWARE_PREFIX，改为在后续步骤中动态生成
   PLUGINS_ENABLED: ${{ github.event.inputs.enable_plugins || 'false' }}   # 👈 新增：导出开关为环境变量
-  DOCKER_ENABLED: ${{ github.event.inputs.enable_docker || 'false' }}   # 👈 新增：导出开关为环境变量
+  DOCKER_KERNEL_ENABLED: ${{ github.event.inputs.enable_docker_kernel || 'false' }}   # 👈 修改：Docker 内核开关
+  DOCKER_APPS_ENABLED: ${{ github.event.inputs.enable_docker_apps || 'false' }}       # 👈 修改：Docker 应用开关
   USB_STORAGE_ENABLED: ${{ github.event.inputs.enable_usb_storage || 'true' }}   # 👈 新增：U盘/Samba4 开关，默认启用
   KEEP_WORKFLOW_RUNS: 10         # 👈 新增：保留 Actions 运行记录的数量
   KEEP_RELEASES: 10              # 👈 新增：保留 Releases 版本的数量
@@ -73,7 +79,8 @@ jobs:
 
         编译选项:
         - 安装插件与主题: $([ "${PLUGINS_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
-        - Docker 支持: $([ "${DOCKER_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
+        - Docker 内核支持: $([ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
+        - Docker 用户态软件: $([ "${DOCKER_APPS_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
         - U盘驱动与Samba4支持: $([ "${USB_STORAGE_ENABLED:-true}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
         EOF
         git config user.name "github-actions[bot]"
@@ -129,10 +136,14 @@ jobs:
         cd ponwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
-        # 👈 新增：动态拼接固件前缀，根据是否勾选 Docker 决定
+        # 👈 修改：动态拼接固件前缀，根据 Docker 选项详细区分
         PREFIX="PonWrt_EN758X-ubi"
-        if [ "${DOCKER_ENABLED:-false}" = "true" ]; then
+        if [ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ] && [ "${DOCKER_APPS_ENABLED:-false}" = "true" ]; then
           PREFIX="${PREFIX}_docker"
+        elif [ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ]; then
+          PREFIX="${PREFIX}_docker_kmod"
+        elif [ "${DOCKER_APPS_ENABLED:-false}" = "true" ]; then
+          PREFIX="${PREFIX}_docker_apps"
         fi
         echo "FIRMWARE_PREFIX=${PREFIX}" >> $GITHUB_ENV
 
@@ -200,7 +211,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        # Artifact 名称改为固定前缀 PonWrt_EN758X-ubi (+ _docker) + 时间戳
+        # Artifact 名称改为固定前缀 PonWrt_EN758X-ubi (+ 后缀) + 时间戳
         name: ${{ env.FIRMWARE_PREFIX }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
@@ -210,10 +221,11 @@ jobs:
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
-        # 👈 将编译选项同步写入 release 描述里
+        # 👈 修改：将编译选项同步写入 release 描述里
         echo "## 编译选项" > release.txt
         echo "- **插件与主题**: $([ "${PLUGINS_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
-        echo "- **Docker 支持**: $([ "${DOCKER_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
+        echo "- **Docker 内核支持**: $([ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
+        echo "- **Docker 用户态软件**: $([ "${DOCKER_APPS_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
         echo "- **U盘驱动与Samba4**: $([ "${USB_STORAGE_ENABLED:-true}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
