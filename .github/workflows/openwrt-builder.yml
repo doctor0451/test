@@ -113,6 +113,9 @@ jobs:
         cd ponwrt && git config --global --add safe.directory /workdir/ponwrt #我的代码
 
     - name: Load custom feeds
+      # 👈 新增：在这里把 Token 注入给脚本使用
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF ponwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
