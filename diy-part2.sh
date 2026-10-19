@@ -116,9 +116,9 @@ else
 fi
 
 # ============================================================
-# 第6、7、8段共用：辅助函数 set_config
+# 第6、7、8、9、10段共用：辅助函数 set_config
 # 兼容三种情况：已存在、已注释、不存在
-# 说明：原第6段内部定义，现移到此处供第6、7、8段共用
+# 说明：原第6段内部定义，现移到此处供后续各段共用
 # ============================================================
 set_config() {
     local key="$1"
@@ -133,7 +133,22 @@ set_config() {
 }
 
 # ============================================================
-# 5.5 启用 plugin.txt 中的插件与主题（云编译时可选）
+# 6. 启用 iStore 商店（云编译时可选，默认关闭）
+#     是否执行由 workflow_dispatch 的 enable_istore 开关控制
+#     对应环境变量：ISTORE_ENABLED = true / false
+# ============================================================
+if [ "${ISTORE_ENABLED:-false}" = "true" ]; then
+    echo "iStore 商店已启用，开始配置..."
+    set_config CONFIG_PACKAGE_luci-app-store y
+    # 部分依赖项
+    set_config CONFIG_PACKAGE_luci-i18n-store-zh-cn y
+    echo "iStore 商店配置完成。"
+else
+    echo "iStore 商店未启用（ISTORE_ENABLED=${ISTORE_ENABLED:-false}），跳过第 6 段。"
+fi
+
+# ============================================================
+# 7. 启用 plugin.txt 中的插件与主题（云编译时可选）
 #     是否执行由 workflow_dispatch 的 enable_plugins 开关控制
 #     对应环境变量：PLUGINS_ENABLED = true / false
 # ============================================================
@@ -195,22 +210,22 @@ if [ "${PLUGINS_ENABLED:-false}" = "true" ]; then
         done < "$GITHUB_WORKSPACE/plugin.txt"
         echo "插件与主题配置完成。"
     else
-        echo "未找到 plugin.txt，跳过。"
+        echo "未找到 plugin.txt，跳过第 7 段。"
     fi
 else
-    echo "插件与主题支持未启用（PLUGINS_ENABLED=${PLUGINS_ENABLED:-false}），跳过。"
+    echo "插件与主题支持未启用（PLUGINS_ENABLED=${PLUGINS_ENABLED:-false}），跳过第 7 段。"
 fi
 
 # ============================================================
-# 6. 启用 Docker 内核支持（云编译时可选）
+# 8. 启用 Docker 内核支持（云编译时可选）
 #    是否执行由 workflow_dispatch 的 enable_docker_kernel 开关控制
 #    对应环境变量：DOCKER_KERNEL_ENABLED = true / false
 # ============================================================
 if [ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ]; then
     echo "Docker 内核支持已启用，开始配置..."
 
-    # 6.1 内核功能开关
-    #     只保留最核心的选项，其他依赖由 6.2 里的 kmod 包自动拉入
+    # 8.1 内核功能开关
+    #     只保留最核心的选项，其他依赖由 8.2 里的 kmod 包自动拉入
     set_config CONFIG_KERNEL_CGROUPS           y
     set_config CONFIG_KERNEL_NAMESPACES        y
     set_config CONFIG_KERNEL_CGROUP_DEVICE     y
@@ -222,7 +237,7 @@ if [ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ]; then
     set_config CONFIG_KERNEL_OVERLAY_FS        y
     set_config CONFIG_KERNEL_IPVLAN            y  # 增加 ipvlan 功能模块
 
-    # 6.2 内核模块（kmod）
+    # 8.2 内核模块（kmod）
     #     必须编译时选上，后期在线安装 kmod 极易因内核版本不匹配而失败
     #     说明：
     #       - kmod-ipt-extra ：iptables-mod-extra 的依赖，被 Docker 网络相关包间接拉入
@@ -248,18 +263,18 @@ if [ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ]; then
 
     echo "Docker 内核支持配置完成。"
 else
-    echo "Docker 内核支持未启用（DOCKER_KERNEL_ENABLED=${DOCKER_KERNEL_ENABLED:-false}），跳过第 6 段。"
+    echo "Docker 内核支持未启用（DOCKER_KERNEL_ENABLED=${DOCKER_KERNEL_ENABLED:-false}），跳过第 8 段。"
 fi
 
 # ============================================================
-# 7. 启用 Docker 用户态软件（云编译时可选）
+# 9. 启用 Docker 用户态软件（云编译时可选）
 #    是否执行由 workflow_dispatch 的 enable_docker_apps 开关控制
 #    对应环境变量：DOCKER_APPS_ENABLED = true / false
 # ============================================================
 if [ "${DOCKER_APPS_ENABLED:-false}" = "true" ]; then
     echo "Docker 用户态软件已启用，开始配置..."
 
-    # 7.1 Docker 用户态软件包
+    # 9.1 Docker 用户态软件包
     for pkg in \
         docker \
         dockerd \
@@ -272,20 +287,20 @@ if [ "${DOCKER_APPS_ENABLED:-false}" = "true" ]; then
 
     echo "Docker 用户态软件配置完成。"
 else
-    echo "Docker 用户态软件未启用（DOCKER_APPS_ENABLED=${DOCKER_APPS_ENABLED:-false}），跳过第 7 段。"
+    echo "Docker 用户态软件未启用（DOCKER_APPS_ENABLED=${DOCKER_APPS_ENABLED:-false}），跳过第 9 段。"
 fi
 
 # ============================================================
-# 8. U盘驱动 + 自动挂载 + Samba4（云编译时可开关，默认启用）
+# 10. U盘驱动 + 自动挂载 + Samba4（云编译时可开关，默认启用）
 #    是否执行由 workflow_dispatch 的 enable_usb_storage 开关控制
 #    对应环境变量：USB_STORAGE_ENABLED = true / false（默认 true）
-#    与第6段若有重复项（如 kmod-fs-ext4），set_config 幂等设置 =y，
+#    与第8段若有重复项（如 kmod-fs-ext4），set_config 幂等设置 =y，
 #    最终值一致，不影响编译，也不冲突。
 # ============================================================
 if [ "${USB_STORAGE_ENABLED:-true}" = "true" ]; then
     echo "U盘驱动与Samba4支持已启用，开始配置..."
 
-    # 8.1 U盘常用文件系统驱动 + 中文文件名 NLS 编码
+    # 10.1 U盘常用文件系统驱动 + 中文文件名 NLS 编码
     #     说明：
     #       - kmod-fs-vfat/msdos/exfat/ext4/f2fs/ntfs3：覆盖U盘常见格式
     #       - kmod-fs-ntfs3：内核6.18推荐的内核态NTFS驱动
@@ -305,7 +320,7 @@ if [ "${USB_STORAGE_ENABLED:-true}" = "true" ]; then
         set_config "CONFIG_PACKAGE_${kopt}" y
     done
 
-    # 8.2 U盘存储与自动挂载
+    # 10.2 U盘存储与自动挂载
     #     说明：
     #       - usb-storage/uas/extras：USB存储设备识别（U盘、移动硬盘、读卡器）
     #       - block-mount/fstools：OpenWrt挂载框架
@@ -321,13 +336,13 @@ if [ "${USB_STORAGE_ENABLED:-true}" = "true" ]; then
         set_config "CONFIG_PACKAGE_${pkg}" y
     done
 
-    # 8.3 Samba4 服务与 LuCI
+    # 10.3 Samba4 服务与 LuCI
     #     samba4-libs 是 samba4-server 的依赖，显式列出更稳妥
     set_config CONFIG_PACKAGE_samba4-server y
     set_config CONFIG_PACKAGE_samba4-libs y
     set_config CONFIG_PACKAGE_luci-app-samba4 y
 
-    # 8.4 常用用户态工具
+    # 10.4 常用用户态工具
     #     说明：
     #       - e2fsprogs：ext2/3/4 格式化/修复
     #       - dosfstools：FAT/FAT32 格式化/修复
@@ -347,7 +362,7 @@ if [ "${USB_STORAGE_ENABLED:-true}" = "true" ]; then
 
     echo "U盘驱动与Samba4配置完成。"
 else
-    echo "U盘驱动与Samba4未启用（USB_STORAGE_ENABLED=${USB_STORAGE_ENABLED:-true}），跳过第 8 段。"
+    echo "U盘驱动与Samba4未启用（USB_STORAGE_ENABLED=${USB_STORAGE_ENABLED:-true}），跳过第 10 段。"
 fi
 
-echo "diy-part2.sh done: 仅保留 XG-040G-MD、HG5585F-CT和H3C HM2004-DU 仨个机型，选中 luci-app-airoha-npu，集成自定义 apk；插件/主题可选；Docker内核/用户态可选；U盘驱动+Samba4 默认启用。"
+echo "diy-part2.sh done: 仅保留 XG-040G-MD、HG5585F-CT和H3C HM2004-DU 仨个机型，选中 luci-app-airoha-npu，集成自定义 apk；插件/主题可选；iStore 可选；Docker内核/用户态可选；U盘驱动+Samba4 默认启用。"
