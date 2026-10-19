@@ -41,8 +41,9 @@ mkdir -p "$APK_DIR"
 
 UPDATE_APK=false
 
-# 获取远程最新 Release 的 Tag 和发布时间
-REMOTE_DATA=$(gh release view -R "$TARGET_REPO" --json tagName,publishedAt -q '.tagName + " " + .publishedAt' 2>/dev/null)
+# 👈 修改：改用 gh release list 获取最新版本（兼容 Pre-release），取第一行
+REMOTE_DATA=$(gh release list -R "$TARGET_REPO" --limit 1 --json tagName,publishedAt -q '.[0].tagName + " " + .[0].publishedAt' 2>/dev/null)
+
 if [ -n "$REMOTE_DATA" ]; then
     LATEST_TAG=$(echo "$REMOTE_DATA" | cut -d' ' -f1)
     REMOTE_PUBLISHED_AT=$(echo "$REMOTE_DATA" | cut -d' ' -f2)
