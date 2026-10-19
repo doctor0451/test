@@ -10,7 +10,7 @@
 # See /LICENSE for more information.
 #
 
-name: OpenWrt Builder
+name: OpenWrt Builder  # 👈 顶级 name 不支持表达式，保持固定
 
 on:
   repository_dispatch:
@@ -56,10 +56,13 @@ env:
   KEEP_WORKFLOW_RUNS: 10         # 👈 新增：保留 Actions 运行记录的数量
   KEEP_RELEASES: 10              # 👈 新增：保留 Releases 版本的数量
   KEEP_DAYS: 20                  # 👈 新增：保留天数的统一参数 (替代原 retain_days)
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # 👈 新增：全局注入 Token，确保 diy-part1.sh 中的 gh 命令能正常执行
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # 👈 新增：动态 Job 名称，根据勾选的参数实时改变格式
+    name: PonWrt${{ github.event.inputs.enable_plugins == 'true' && '-插件' || '' }}${{ (github.event.inputs.enable_docker_kernel == 'true' || github.event.inputs.enable_docker_apps == 'true') && '-docker' || '' }}${{ github.event.inputs.enable_docker_kernel == 'true' && '_kernel' || '' }}${{ github.event.inputs.enable_docker_apps == 'true' && '_apps' || '' }}${{ (github.event.inputs.enable_usb_storage == 'true' || github.event.inputs.enable_usb_storage == '') && '-启用网盘' || '' }}
     permissions:  # 👈 新增这一行
       actions: write      # 👈 新增这一行，允许删除旧 workflow run 记录（解决这个报错的关键）
       contents: write        # 👈 新增这一行，允许创建 Release、上传固件
@@ -113,9 +116,6 @@ jobs:
         cd ponwrt && git config --global --add safe.directory /workdir/ponwrt #我的代码
 
     - name: Load custom feeds
-      # 👈 新增：在这里把 Token 注入给脚本使用
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF ponwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
@@ -244,17 +244,34 @@ jobs:
         # 直接用固定路径，避免 env.FIRMWARE 意外为空时把 /* 展开到根目录
         files: /tmp/firmware-release/*
 
-        # 👈 修改：修复 gh run list 不支持 createdAt 字段的问题，改用 gh api 准确按时间过滤
+    # 👈 修改：修复 gh run list 不支持 createdAt 字段的问题，改用 gh api 准确按时间过滤
     - name: Cleanup Workflow Runs
       if: always()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        echo "=== 正在清理 Actions 运行记录 (保留最新 ${{ env.KEEP_WORKFLOW_RUNS }} 个且 ${{ env.KEEP_DAYS }} 天内) ==="
+        echo "=== 正在清理 Actions 运行记录 ==="
+        
+        # 👈 新增：优先清理已取消 (cancelled) 和失败 (failure) 的记录，保留最新的 2 个方便排查问题
+        echo "--- 优先清理 cancelled/failure 记录 ---"
+        gh api repos/${{ github.repository }}/actions/runs --paginate | jq -r '
+          .workflow_runs
+          | map(select(.conclusion == "cancelled" or .conclusion == "failure"))
+          | sort_by(.created_at) | reverse
+          | .[2:][] | .id
+        ' | while read -r id; do
+          if [ -n "$id" ]; then
+            echo "强制删除已取消/失败记录: $id"
+            gh run delete "$id" || true
+          fi
+        done
+
+        echo "=== 正在清理正常运行记录 (保留最新 ${{ env.KEEP_WORKFLOW_RUNS }} 个且 ${{ env.KEEP_DAYS }} 天内) ==="
         CUTOFF_TS=$(date -u -d "${{ env.KEEP_DAYS }} days ago" +%s)
         # 使用 gh api 获取完整运行记录，并用 jq 正确解析 created_at 时间戳进行过滤
         gh api repos/${{ github.repository }}/actions/runs --paginate | jq -r --argjson cutoff_ts "$CUTOFF_TS" '
           .workflow_runs
+          | map(select(.conclusion != "cancelled" and .conclusion != "failure"))
           | sort_by(.created_at) | reverse
           | .[ ${{ env.KEEP_WORKFLOW_RUNS }}: ][]
           | select( ( .created_at | fromdateiso8601 ) < $cutoff_ts )
