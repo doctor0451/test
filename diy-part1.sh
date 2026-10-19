@@ -92,7 +92,7 @@ else
     echo "警告：无法获取 $TARGET_REPO 的最新 Release，将使用仓库内原有 apk 文件。"
 fi
 
-# 👈 如果下载了新的 APK，把它推送到你的 GitHub 仓库，这样网页就能看到了
+# 👈 关键新增：如果下载了新的 APK，把它推送到你的 GitHub 仓库，这样网页就能看到了
 if [ "$UPDATE_APK" = true ]; then
     echo "正在将最新的 APK 推送到仓库..."
     cd "$GITHUB_WORKSPACE"
@@ -100,7 +100,8 @@ if [ "$UPDATE_APK" = true ]; then
     git config user.email "github-actions[bot]@users.noreply.github.com"
     git add apk/
     git commit -m "Auto-update APK files from qwe-qaq/luci-app [skip ci]" || true
-    git push origin HEAD:${{ github.ref_name }} || true
+    # 👇 把下面这行的 ${{ github.ref_name }} 替换掉
+    git push origin HEAD:$GITHUB_REF_NAME || true
     cd ponwrt
 fi
 
