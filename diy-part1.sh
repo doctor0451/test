@@ -32,25 +32,27 @@ grep -q "src-git small" feeds.conf.default || \
 # ============================================================
 echo "检查并下载最新的 luci-app-natmode 和 luci-app-pon-status apk..."
 
-# 👈 关键：使用 Actions 内置的 GITHUB_TOKEN 环境变量
-export GH_TOKEN="$GITHUB_TOKEN"
-
 TARGET_REPO="qwe-qaq/luci-app"
 APK_DIR="$GITHUB_WORKSPACE/apk"
 mkdir -p "$APK_DIR"
 
 UPDATE_APK=false
 
-# 👈 修改：改用 gh release list 获取最新版本（兼容 Pre-release），取第一行
-REMOTE_DATA=$(gh release list -R "$TARGET_REPO" --limit 1 --json tagName,publishedAt -q '.[0].tagName + " " + .[0].publishedAt' 2>/dev/null)
+# 👈 改用 curl 直接请求公开 API，绕开 gh 命令的跨仓库鉴权限制
+# 先尝试获取 latest，如果失败（说明只有预发布版），则取 releases 列表的第一个
+LATEST_RELEASE_JSON=$(curl -s "https://api.github.com/repos/$TARGET_REPO/releases/latest")
+if [[ -z "$LATEST_RELEASE_JSON" ]] || [[ "$(echo "$LATEST_RELEASE_JSON" | jq -r '.message')" == "Not Found" ]]; then
+    LATEST_RELEASE_JSON=$(curl -s "https://api.github.com/repos/$TARGET_REPO/releases" | jq '.[0]')
+fi
 
-if [ -n "$REMOTE_DATA" ]; then
-    LATEST_TAG=$(echo "$REMOTE_DATA" | cut -d' ' -f1)
-    REMOTE_PUBLISHED_AT=$(echo "$REMOTE_DATA" | cut -d' ' -f2)
+LATEST_TAG=$(echo "$LATEST_RELEASE_JSON" | jq -r '.tag_name')
+REMOTE_PUBLISHED_AT=$(echo "$LATEST_RELEASE_JSON" | jq -r '.published_at')
+
+if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "null" ]; then
     REMOTE_TS=$(date -d "$REMOTE_PUBLISHED_AT" +%s)
     
-    # 列出最新 Release 中的 Asset
-    gh release view "$LATEST_TAG" -R "$TARGET_REPO" --json assets -q '.assets[].name' | while read -r asset_name; do
+    # 提取资产列表
+    echo "$LATEST_RELEASE_JSON" | jq -r '.assets[].name' | while read -r asset_name; do
         if [[ "$asset_name" == luci-app-natmode*.apk || "$asset_name" == luci-app-pon-status*.apk ]]; then
             NEED_DOWNLOAD=false
             LOCAL_FILES=$(ls "$APK_DIR"/${asset_name%%_*}*.apk 2>/dev/null || true)
@@ -71,7 +73,10 @@ if [ -n "$REMOTE_DATA" ]; then
             if [ "$NEED_DOWNLOAD" = true ]; then
                 TMP_DIR=$(mktemp -d)
                 echo "下载 $asset_name 到临时目录..."
-                if gh release download "$LATEST_TAG" -R "$TARGET_REPO" -p "$asset_name" -D "$TMP_DIR" --clobber; then
+                
+                # 👈 使用 curl 直接下载文件
+                DOWNLOAD_URL="https://github.com/$TARGET_REPO/releases/download/$LATEST_TAG/$asset_name"
+                if curl -sL -o "$TMP_DIR/$asset_name" "$DOWNLOAD_URL"; then
                     rm -f "$APK_DIR"/${asset_name%%_*}*.apk
                     mv "$TMP_DIR"/"$asset_name" "$APK_DIR"/
                     echo "替换成功: $asset_name"
@@ -87,7 +92,7 @@ else
     echo "警告：无法获取 $TARGET_REPO 的最新 Release，将使用仓库内原有 apk 文件。"
 fi
 
-# 👈 关键新增：如果下载了新的 APK，把它推送到你的 GitHub 仓库，这样网页就能看到了
+# 👈 如果下载了新的 APK，把它推送到你的 GitHub 仓库，这样网页就能看到了
 if [ "$UPDATE_APK" = true ]; then
     echo "正在将最新的 APK 推送到仓库..."
     cd "$GITHUB_WORKSPACE"
