@@ -33,9 +33,13 @@ grep -q "src-git small" feeds.conf.default || \
 
 # ============================================================
 # 4. 检查并拉取 qwe-qaq/luci-app 最新的 natmode 和 pon-status apk
-#    👈 新增：从 diy-part2.sh 移过来，放在环境准备阶段更合理
+#    说明：提前配置 GH_TOKEN，否则 gh 命令会因缺少认证而失败
 # ============================================================
 echo "检查并下载最新的 luci-app-natmode 和 luci-app-pon-status apk..."
+
+# 👈 新增：注入 GitHub Token，允许 gh CLI 正常拉取外部仓库的 Release
+export GH_TOKEN="${{ github.token }}"
+
 TARGET_REPO="qwe-qaq/luci-app"
 APK_DIR="$GITHUB_WORKSPACE/apk"
 mkdir -p "$APK_DIR"
@@ -77,11 +81,19 @@ if [ -n "$REMOTE_DATA" ]; then
                 NEED_DOWNLOAD=true
             fi
             
-            # 执行替换
+            # 👈 优化：执行替换（先下载到临时目录，成功后再删除旧包，防止网络问题导致丢包）
             if [ "$NEED_DOWNLOAD" = true ]; then
-                # 先清理本地同名的旧包，防止同时存在两个版本
-                rm -f "$APK_DIR"/${asset_name%%_*}*.apk
-                gh release download "$LATEST_TAG" -R "$TARGET_REPO" -p "$asset_name" -D "$APK_DIR" --clobber
+                TMP_DIR=$(mktemp -d)
+                echo "下载 $asset_name 到临时目录..."
+                if gh release download "$LATEST_TAG" -R "$TARGET_REPO" -p "$asset_name" -D "$TMP_DIR" --clobber; then
+                    # 下载成功，删除本地同名的旧包，并移入新包
+                    rm -f "$APK_DIR"/${asset_name%%_*}*.apk
+                    mv "$TMP_DIR"/"$asset_name" "$APK_DIR"/
+                    echo "替换成功: $asset_name"
+                else
+                    echo "警告：$asset_name 下载失败，保留本地旧版本。"
+                fi
+                rm -rf "$TMP_DIR"
             fi
         fi
     done
