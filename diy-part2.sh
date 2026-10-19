@@ -59,6 +59,29 @@ grep -q "^CONFIG_PACKAGE_luci-app-airoha-npu=" .config || echo "CONFIG_PACKAGE_l
 #       - wget: exited with error 8
 #       - UNTRUSTED signature）
 # ============================================================
+
+# 👈 新增：编译前从 qwe-qaq/luci-app 下载最新的 natmode 和 pon-status 包
+echo "检查并下载最新的 luci-app-natmode 和 luci-app-pon-status apk..."
+TARGET_REPO="qwe-qaq/luci-app"
+APK_DIR="$GITHUB_WORKSPACE/apk"
+mkdir -p "$APK_DIR"
+
+# 获取最新 Release 的 Tag
+LATEST_TAG=$(gh release view -R "$TARGET_REPO" --json tagName -q .tagName 2>/dev/null)
+if [ -n "$LATEST_TAG" ]; then
+    # 列出所有 Asset，过滤出需要的包并下载
+    gh release view "$LATEST_TAG" -R "$TARGET_REPO" --json assets -q '.assets[].name' | while read -r asset_name; do
+        case "$asset_name" in
+            luci-app-natmode*.apk|luci-app-pon-status*.apk)
+                echo "下载最新包: $asset_name"
+                gh release download "$LATEST_TAG" -R "$TARGET_REPO" -p "$asset_name" -D "$APK_DIR" --clobber
+                ;;
+        esac
+    done
+else
+    echo "警告：无法获取 $TARGET_REPO 的最新 Release，将使用仓库内原有 apk 文件。"
+fi
+
 if [ -d "$GITHUB_WORKSPACE/apk" ]; then
     echo "发现自定义 apk 目录，开始集成..."
 
