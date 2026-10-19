@@ -32,7 +32,65 @@ grep -q "src-git small" feeds.conf.default || \
     echo "src-git small https://github.com/kenzok8/small-package" >> feeds.conf.default
 
 # ============================================================
-# 4. autocore 覆盖逻辑（按 Git 提交时间比较）
+# 4. 检查并拉取 qwe-qaq/luci-app 最新的 natmode 和 pon-status apk
+#    👈 新增：从 diy-part2.sh 移过来，放在环境准备阶段更合理
+# ============================================================
+echo "检查并下载最新的 luci-app-natmode 和 luci-app-pon-status apk..."
+TARGET_REPO="qwe-qaq/luci-app"
+APK_DIR="$GITHUB_WORKSPACE/apk"
+mkdir -p "$APK_DIR"
+
+# 获取远程最新 Release 的 Tag 和发布时间
+REMOTE_DATA=$(gh release view -R "$TARGET_REPO" --json tagName,publishedAt -q '.tagName + " " + .publishedAt' 2>/dev/null)
+if [ -n "$REMOTE_DATA" ]; then
+    LATEST_TAG=$(echo "$REMOTE_DATA" | cut -d' ' -f1)
+    REMOTE_PUBLISHED_AT=$(echo "$REMOTE_DATA" | cut -d' ' -f2)
+    REMOTE_TS=$(date -d "$REMOTE_PUBLISHED_AT" +%s)
+    
+    # 列出最新 Release 中的 Asset
+    gh release view "$LATEST_TAG" -R "$TARGET_REPO" --json assets -q '.assets[].name' | while read -r asset_name; do
+        # 匹配需要的 apk 名称
+        if [[ "$asset_name" == luci-app-natmode*.apk || "$asset_name" == luci-app-pon-status*.apk ]]; then
+            NEED_DOWNLOAD=false
+            
+            # 检查本地是否有同名或同类型的文件
+            LOCAL_FILES=$(ls "$APK_DIR"/${asset_name%%_*}*.apk 2>/dev/null || true)
+            
+            if [ -n "$LOCAL_FILES" ]; then
+                # 获取本地文件在 Git 中的最后一次提交时间（最精确）
+                FIRST_LOCAL_FILE=$(echo "$LOCAL_FILES" | head -n 1)
+                LOCAL_TS=$(git -C "$GITHUB_WORKSPACE" log -1 --format=%ct -- "apk/$(basename "$FIRST_LOCAL_FILE")" 2>/dev/null)
+                
+                if [ -n "$LOCAL_TS" ]; then
+                    if [ "$REMOTE_TS" -gt "$LOCAL_TS" ]; then
+                        echo "远程文件 $asset_name 比本地新 (Remote: $REMOTE_TS > Local: $LOCAL_TS)，将替换"
+                        NEED_DOWNLOAD=true
+                    else
+                        echo "本地已存在更新的 $asset_name (Remote: $REMOTE_TS <= Local: $LOCAL_TS)，跳过下载"
+                    fi
+                else
+                    echo "本地文件 $FIRST_LOCAL_FILE 缺少 Git 记录，默认下载覆盖"
+                    NEED_DOWNLOAD=true
+                fi
+            else
+                echo "本地不存在 $asset_name，准备下载"
+                NEED_DOWNLOAD=true
+            fi
+            
+            # 执行替换
+            if [ "$NEED_DOWNLOAD" = true ]; then
+                # 先清理本地同名的旧包，防止同时存在两个版本
+                rm -f "$APK_DIR"/${asset_name%%_*}*.apk
+                gh release download "$LATEST_TAG" -R "$TARGET_REPO" -p "$asset_name" -D "$APK_DIR" --clobber
+            fi
+        fi
+    done
+else
+    echo "警告：无法获取 $TARGET_REPO 的最新 Release，将使用仓库内原有 apk 文件。"
+fi
+
+# ============================================================
+# 5. autocore 覆盖逻辑（按 Git 提交时间比较）
 #    比较：
 #      - 用户仓库：$GITHUB_WORKSPACE/autocore/Makefile
 #      - 源码仓库：package/emortal/autocore/Makefile
@@ -72,4 +130,4 @@ else
     echo "警告：autocore/Makefile 或源码 autocore/Makefile 不存在，跳过覆盖。"
 fi
 
-echo "diy-part1.sh done: luci-app-airoha-npu cloned, small feed added, autocore checked."
+echo "diy-part1.sh done: luci-app-airoha-npu cloned, small feed added, apk downloaded, autocore checked."
