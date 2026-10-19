@@ -21,6 +21,11 @@ on:
         required: false
         default: false
         type: boolean
+      enable_istore:                 # 👈 新增：云编译时可勾选的 iStore 商店开关（默认关闭）
+        description: '启用 iStore 商店'
+        required: false
+        default: false
+        type: boolean
       enable_docker_kernel:          # 👈 修改：拆分为 Docker 内核支持
         description: '启用 Docker 内核支持 (Cgroups/IPvlan等)'
         required: false
@@ -33,6 +38,11 @@ on:
         type: boolean
       enable_usb_storage:            # 👈 新增：云编译时可勾选的 U盘驱动/Samba4 开关（默认启用）
         description: '启用U盘驱动与Samba4支持'
+        required: false
+        default: true
+        type: boolean
+      disable_recovery:              # 👈 新增：云编译时是否不发布 initramfs-recovery 固件（默认开启，即不发布）
+        description: '不发布 initramfs-recovery 固件'
         required: false
         default: true
         type: boolean
@@ -50,9 +60,11 @@ env:
   TZ: Asia/Shanghai
   # 👈 修改：移除硬编码的 FIRMWARE_PREFIX，改为在后续步骤中动态生成
   PLUGINS_ENABLED: ${{ github.event.inputs.enable_plugins || 'false' }}   # 👈 新增：导出开关为环境变量
+  ISTORE_ENABLED: ${{ github.event.inputs.enable_istore || 'false' }}    # 👈 新增：导出 iStore 开关为环境变量
   DOCKER_KERNEL_ENABLED: ${{ github.event.inputs.enable_docker_kernel || 'false' }}   # 👈 修改：Docker 内核开关
   DOCKER_APPS_ENABLED: ${{ github.event.inputs.enable_docker_apps || 'false' }}       # 👈 修改：Docker 应用开关
   USB_STORAGE_ENABLED: ${{ github.event.inputs.enable_usb_storage || 'true' }}   # 👈 新增：U盘/Samba4 开关，默认启用
+  DISABLE_RECOVERY: ${{ github.event.inputs.disable_recovery || 'true' }}   # 👈 新增：不发布 recovery 固件开关，默认启用
   KEEP_WORKFLOW_RUNS: 10         # 👈 新增：保留 Actions 运行记录的数量
   KEEP_RELEASES: 10              # 👈 新增：保留 Releases 版本的数量
   KEEP_DAYS: 20                  # 👈 新增：保留天数的统一参数 (替代原 retain_days)
@@ -61,8 +73,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # 👈 新增：动态 Job 名称，根据勾选的参数实时改变格式
-    name: PonWrt${{ github.event.inputs.enable_plugins == 'true' && '-插件' || '' }}${{ (github.event.inputs.enable_docker_kernel == 'true' || github.event.inputs.enable_docker_apps == 'true') && '-docker' || '' }}${{ github.event.inputs.enable_docker_kernel == 'true' && '_kernel' || '' }}${{ github.event.inputs.enable_docker_apps == 'true' && '_apps' || '' }}${{ (github.event.inputs.enable_usb_storage == 'true' || github.event.inputs.enable_usb_storage == '') && '-启用网盘' || '' }}
+    # 👈 修改：动态 Job 名称，加入 iStore 选项
+    name: PonWrt${{ github.event.inputs.enable_plugins == 'true' && '-插件' || '' }}${{ github.event.inputs.enable_istore == 'true' && '-iStore' || '' }}${{ (github.event.inputs.enable_docker_kernel == 'true' || github.event.inputs.enable_docker_apps == 'true') && '-docker' || '' }}${{ github.event.inputs.enable_docker_kernel == 'true' && '_kernel' || '' }}${{ github.event.inputs.enable_docker_apps == 'true' && '_apps' || '' }}${{ (github.event.inputs.enable_usb_storage == 'true' || github.event.inputs.enable_usb_storage == '') && '-启用网盘' || '' }}
     permissions:  # 👈 新增这一行
       actions: write      # 👈 新增这一行，允许删除旧 workflow run 记录（解决这个报错的关键）
       contents: write        # 👈 新增这一行，允许创建 Release、上传固件
@@ -83,6 +95,7 @@ jobs:
 
         编译选项:
         - 安装插件与主题: $([ "${PLUGINS_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
+        - 启用 iStore 商店: $([ "${ISTORE_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
         - Docker 内核支持: $([ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
         - Docker 用户态软件: $([ "${DOCKER_APPS_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
         - U盘驱动与Samba4支持: $([ "${USB_STORAGE_ENABLED:-true}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")
@@ -196,7 +209,12 @@ jobs:
 
         # 递归查找所有 .itb / .bin / .manifest / .buildinfo 文件并复制到扁平目录
         # 说明：ponwrt 的 UBI 固件扩展名是 .itb（不是 .bin），必须同时匹配
-        find /workdir/ponwrt/bin/targets -type f \( -name "*.itb" -o -name "*.bin" -o -name "*.manifest" -o -name "*.buildinfo" \) -exec cp {} "$RELEASE_DIR/" \;
+        # 👈 新增：根据 DISABLE_RECOVERY 判断是否过滤 recovery 和 initramfs
+        if [ "${DISABLE_RECOVERY:-true}" = "true" ]; then
+          find /workdir/ponwrt/bin/targets -type f \( -name "*.itb" -o -name "*.bin" -o -name "*.manifest" -o -name "*.buildinfo" \) ! -name "*recovery*" ! -name "*initramfs*" -exec cp {} "$RELEASE_DIR/" \;
+        else
+          find /workdir/ponwrt/bin/targets -type f \( -name "*.itb" -o -name "*.bin" -o -name "*.manifest" -o -name "*.buildinfo" \) -exec cp {} "$RELEASE_DIR/" \;
+        fi
 
         # 列出收集到的文件，方便排查
         echo "=== Files collected for release ==="
@@ -225,9 +243,10 @@ jobs:
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
-        # 👈 修改：将编译选项同步写入 release 描述里
+        # 👈 修改：将编译选项同步写入 release 描述里，加入 iStore
         echo "## 编译选项" > release.txt
         echo "- **插件与主题**: $([ "${PLUGINS_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
+        echo "- **启用 iStore 商店**: $([ "${ISTORE_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
         echo "- **Docker 内核支持**: $([ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
         echo "- **Docker 用户态软件**: $([ "${DOCKER_APPS_ENABLED:-false}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
         echo "- **U盘驱动与Samba4**: $([ "${USB_STORAGE_ENABLED:-true}" = "true" ] && echo "✅ 已勾选" || echo "❌ 未勾选")" >> release.txt
