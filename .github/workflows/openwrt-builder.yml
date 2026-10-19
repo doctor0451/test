@@ -10,7 +10,7 @@
 # See /LICENSE for more information.
 #
 
-name: OpenWrt Builder  # 👈 顶级 name 不支持表达式，保持固定
+name: PonWrt Builder  # 👈 顶级 name 不支持表达式，保持固定
 
 on:
   repository_dispatch:
