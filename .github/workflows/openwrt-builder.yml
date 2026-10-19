@@ -241,21 +241,22 @@ jobs:
         # 直接用固定路径，避免 env.FIRMWARE 意外为空时把 /* 展开到根目录
         files: /tmp/firmware-release/*
 
-    # 👈 修改：完全替代 Mattraks，用 gh 原生实现"保留天数+数量"双重条件的强制清理
+        # 👈 修改：修复 gh run list 不支持 createdAt 字段的问题，改用 gh api 准确按时间过滤
     - name: Cleanup Workflow Runs
       if: always()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         echo "=== 正在清理 Actions 运行记录 (保留最新 ${{ env.KEEP_WORKFLOW_RUNS }} 个且 ${{ env.KEEP_DAYS }} 天内) ==="
-        CUTOFF_ISO=$(date -u -d "${{ env.KEEP_DAYS }} days ago" +%Y-%m-%dT%H:%M:%SZ)
-        # 获取列表，倒序排，跳过前 N 个（保护最新的），在剩下的里面只挑出早于设定天数的进行删除
-        gh run list --limit 100 --json databaseId,createdAt --jq "
-          (sort_by(.createdAt) | reverse) as \$sorted |
-          \$sorted[ ${{ env.KEEP_WORKFLOW_RUNS }}: ] | 
-          map(select(.createdAt < \"$CUTOFF_ISO\")) | 
-          .[].databaseId
-        " | while read -r id; do
+        CUTOFF_TS=$(date -u -d "${{ env.KEEP_DAYS }} days ago" +%s)
+        # 使用 gh api 获取完整运行记录，并用 jq 正确解析 created_at 时间戳进行过滤
+        gh api repos/${{ github.repository }}/actions/runs --paginate | jq -r --argjson cutoff_ts "$CUTOFF_TS" '
+          .workflow_runs
+          | sort_by(.created_at) | reverse
+          | .[ ${{ env.KEEP_WORKFLOW_RUNS }}: ][]
+          | select( ( .created_at | fromdateiso8601 ) < $cutoff_ts )
+          | .id
+        ' | while read -r id; do
           if [ -n "$id" ]; then
             echo "强制删除运行记录: $id"
             gh run delete "$id" || true
@@ -279,11 +280,11 @@ jobs:
 
         # 2. 清理旧版本 (保留最新 N 个且 M 天内)
         echo "=== 正在清理旧版本 (保留最新 ${{ env.KEEP_RELEASES }} 个且 ${{ env.KEEP_DAYS }} 天内) ==="
-        CUTOFF_ISO=$(date -u -d "${{ env.KEEP_DAYS }} days ago" +%Y-%m-%dT%H:%M:%SZ)
+        CUTOFF_TS=$(date -u -d "${{ env.KEEP_DAYS }} days ago" +%s)
         gh release list --exclude-drafts --limit 100 --json tagName,createdAt --jq "
           (sort_by(.createdAt) | reverse) as \$sorted |
           \$sorted[ ${{ env.KEEP_RELEASES }}: ] | 
-          map(select(.createdAt < \"$CUTOFF_ISO\")) | 
+          map(select( ( .createdAt | fromdateiso8601 ) < $CUTOFF_TS )) | 
           .[].tagName
         " | while read -r tag; do
           if [ -n "$tag" ]; then
