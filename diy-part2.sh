@@ -60,23 +60,56 @@ grep -q "^CONFIG_PACKAGE_luci-app-airoha-npu=" .config || echo "CONFIG_PACKAGE_l
 #       - UNTRUSTED signature）
 # ============================================================
 
-# 👈 新增：编译前从 qwe-qaq/luci-app 下载最新的 natmode 和 pon-status 包
+# 👈 新增：编译前检查并拉取 qwe-qaq/luci-app 最新的 natmode 和 pon-status apk
 echo "检查并下载最新的 luci-app-natmode 和 luci-app-pon-status apk..."
 TARGET_REPO="qwe-qaq/luci-app"
 APK_DIR="$GITHUB_WORKSPACE/apk"
 mkdir -p "$APK_DIR"
 
-# 获取最新 Release 的 Tag
-LATEST_TAG=$(gh release view -R "$TARGET_REPO" --json tagName -q .tagName 2>/dev/null)
-if [ -n "$LATEST_TAG" ]; then
-    # 列出所有 Asset，过滤出需要的包并下载
+# 获取远程最新 Release 的 Tag 和发布时间
+REMOTE_DATA=$(gh release view -R "$TARGET_REPO" --json tagName,publishedAt -q '.tagName + " " + .publishedAt' 2>/dev/null)
+if [ -n "$REMOTE_DATA" ]; then
+    LATEST_TAG=$(echo "$REMOTE_DATA" | cut -d' ' -f1)
+    REMOTE_PUBLISHED_AT=$(echo "$REMOTE_DATA" | cut -d' ' -f2)
+    REMOTE_TS=$(date -d "$REMOTE_PUBLISHED_AT" +%s)
+    
+    # 列出最新 Release 中的 Asset
     gh release view "$LATEST_TAG" -R "$TARGET_REPO" --json assets -q '.assets[].name' | while read -r asset_name; do
-        case "$asset_name" in
-            luci-app-natmode*.apk|luci-app-pon-status*.apk)
-                echo "下载最新包: $asset_name"
+        # 匹配需要的 apk 名称
+        if [[ "$asset_name" == luci-app-natmode*.apk || "$asset_name" == luci-app-pon-status*.apk ]]; then
+            NEED_DOWNLOAD=false
+            
+            # 检查本地是否有同名或同类型的文件
+            LOCAL_FILES=$(ls "$APK_DIR"/${asset_name%%_*}*.apk 2>/dev/null || true)
+            
+            if [ -n "$LOCAL_FILES" ]; then
+                # 获取本地文件在 Git 中的最后一次提交时间（最精确）
+                FIRST_LOCAL_FILE=$(echo "$LOCAL_FILES" | head -n 1)
+                LOCAL_TS=$(git -C "$GITHUB_WORKSPACE" log -1 --format=%ct -- "apk/$(basename "$FIRST_LOCAL_FILE")" 2>/dev/null)
+                
+                if [ -n "$LOCAL_TS" ]; then
+                    if [ "$REMOTE_TS" -gt "$LOCAL_TS" ]; then
+                        echo "远程文件 $asset_name 比本地新 (Remote: $REMOTE_TS > Local: $LOCAL_TS)，将替换"
+                        NEED_DOWNLOAD=true
+                    else
+                        echo "本地已存在更新的 $asset_name (Remote: $REMOTE_TS <= Local: $LOCAL_TS)，跳过下载"
+                    fi
+                else
+                    echo "本地文件 $FIRST_LOCAL_FILE 缺少 Git 记录，默认下载覆盖"
+                    NEED_DOWNLOAD=true
+                fi
+            else
+                echo "本地不存在 $asset_name，准备下载"
+                NEED_DOWNLOAD=true
+            fi
+            
+            # 执行替换
+            if [ "$NEED_DOWNLOAD" = true ]; then
+                # 先清理本地同名的旧包，防止同时存在两个版本
+                rm -f "$APK_DIR"/${asset_name%%_*}*.apk
                 gh release download "$LATEST_TAG" -R "$TARGET_REPO" -p "$asset_name" -D "$APK_DIR" --clobber
-                ;;
-        esac
+            fi
+        fi
     done
 else
     echo "警告：无法获取 $TARGET_REPO 的最新 Release，将使用仓库内原有 apk 文件。"
@@ -171,7 +204,7 @@ if [ "${PLUGINS_ENABLED:-false}" = "true" ]; then
             # 跳过空行
             [ -z "$line" ] && continue
             
-            # 👈 修改：判断分类，支持 3 个类别
+            # 判断分类，支持 3 个类别
             if [[ "$line" == *"luci插件："* ]]; then
                 current_section="luci"
                 continue
@@ -201,7 +234,7 @@ if [ "${PLUGINS_ENABLED:-false}" = "true" ]; then
                 echo "选中主题: $pkg_name"
                 set_config "CONFIG_PACKAGE_${pkg_name}" y
             elif [ "$current_section" = "luci" ]; then
-                # 👈 修改：如果是 luci 插件，自动判断并加上 luci-app- 前缀
+                # 如果是 luci 插件，自动判断并加上 luci-app- 前缀
                 if [[ "$pkg_name" != luci-app-* ]]; then
                     echo "选中LuCI插件: luci-app-${pkg_name}"
                     set_config "CONFIG_PACKAGE_luci-app-${pkg_name}" y
@@ -242,7 +275,7 @@ if [ "${DOCKER_KERNEL_ENABLED:-false}" = "true" ]; then
     set_config CONFIG_KERNEL_VETH              y
     set_config CONFIG_KERNEL_BRIDGE            y
     set_config CONFIG_KERNEL_OVERLAY_FS        y
-    set_config CONFIG_KERNEL_IPVLAN            y  # 👈 新增：增加 ipvlan 功能模块
+    set_config CONFIG_KERNEL_IPVLAN            y  # 增加 ipvlan 功能模块
 
     # 6.2 内核模块（kmod）
     #     必须编译时选上，后期在线安装 kmod 极易因内核版本不匹配而失败
