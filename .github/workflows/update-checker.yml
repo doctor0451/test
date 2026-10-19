@@ -13,7 +13,8 @@
 name: Update Checker
 
 env:
-  REPO_URL: https://github.com/coolsnowwolf/lede
+  # 👈 修改：将此处更新为你实际编译的源码仓库
+  REPO_URL: https://github.com/pbs05/ponwrt.git
   REPO_BRANCH: master
 
 on:
