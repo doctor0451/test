@@ -37,9 +37,6 @@ grep -q "src-git small" feeds.conf.default || \
 # ============================================================
 echo "检查并下载最新的 luci-app-natmode 和 luci-app-pon-status apk..."
 
-# 👈 新增：注入 GitHub Token，允许 gh CLI 正常拉取外部仓库的 Release
-export GH_TOKEN="${{ github.token }}"
-
 TARGET_REPO="qwe-qaq/luci-app"
 APK_DIR="$GITHUB_WORKSPACE/apk"
 mkdir -p "$APK_DIR"
