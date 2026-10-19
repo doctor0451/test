@@ -38,8 +38,7 @@ mkdir -p "$APK_DIR"
 
 UPDATE_APK=false
 
-# 👈 改用 curl 直接请求公开 API，绕开 gh 命令的跨仓库鉴权限制
-# 先尝试获取 latest，如果失败（说明只有预发布版），则取 releases 列表的第一个
+# 获取 API JSON
 LATEST_RELEASE_JSON=$(curl -s "https://api.github.com/repos/$TARGET_REPO/releases/latest")
 if [[ -z "$LATEST_RELEASE_JSON" ]] || [[ "$(echo "$LATEST_RELEASE_JSON" | jq -r '.message')" == "Not Found" ]]; then
     LATEST_RELEASE_JSON=$(curl -s "https://api.github.com/repos/$TARGET_REPO/releases" | jq '.[0]')
@@ -51,8 +50,8 @@ REMOTE_PUBLISHED_AT=$(echo "$LATEST_RELEASE_JSON" | jq -r '.published_at')
 if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "null" ]; then
     REMOTE_TS=$(date -d "$REMOTE_PUBLISHED_AT" +%s)
     
-    # 提取资产列表
-    echo "$LATEST_RELEASE_JSON" | jq -r '.assets[].name' | while read -r asset_name; do
+    # 👈 修复点：这里使用 < <(...) 代替管道，避免变量丢失
+    while read -r asset_name; do
         if [[ "$asset_name" == luci-app-natmode*.apk || "$asset_name" == luci-app-pon-status*.apk ]]; then
             NEED_DOWNLOAD=false
             LOCAL_FILES=$(ls "$APK_DIR"/${asset_name%%_*}*.apk 2>/dev/null || true)
@@ -74,7 +73,6 @@ if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "null" ]; then
                 TMP_DIR=$(mktemp -d)
                 echo "下载 $asset_name 到临时目录..."
                 
-                # 👈 使用 curl 直接下载文件
                 DOWNLOAD_URL="https://github.com/$TARGET_REPO/releases/download/$LATEST_TAG/$asset_name"
                 if curl -sL -o "$TMP_DIR/$asset_name" "$DOWNLOAD_URL"; then
                     rm -f "$APK_DIR"/${asset_name%%_*}*.apk
@@ -87,12 +85,12 @@ if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "null" ]; then
                 rm -rf "$TMP_DIR"
             fi
         fi
-    done
+    done < <(echo "$LATEST_RELEASE_JSON" | jq -r '.assets[].name')
 else
     echo "警告：无法获取 $TARGET_REPO 的最新 Release，将使用仓库内原有 apk 文件。"
 fi
 
-# 👈 关键新增：如果下载了新的 APK，把它推送到你的 GitHub 仓库，这样网页就能看到了
+# 👈 如果下载了新的 APK，把它推送到你的 GitHub 仓库，这样网页就能看到了
 if [ "$UPDATE_APK" = true ]; then
     echo "正在将最新的 APK 推送到仓库..."
     cd "$GITHUB_WORKSPACE"
@@ -100,8 +98,9 @@ if [ "$UPDATE_APK" = true ]; then
     git config user.email "github-actions[bot]@users.noreply.github.com"
     git add apk/
     git commit -m "Auto-update APK files from qwe-qaq/luci-app [skip ci]" || true
-    # 👇 把下面这行的 ${{ github.ref_name }} 替换掉
+    # 👈 确保推到当前分支，并忽略报错防止流水线中断
     git push origin HEAD:$GITHUB_REF_NAME || true
+    echo "推送完成。"
     cd ponwrt
 fi
 
