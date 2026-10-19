@@ -21,11 +21,6 @@ on:
         required: false
         default: false
         type: boolean
-      enable_istore:                 # 👈 新增：云编译时可勾选的 iStore 商店开关（默认关闭）
-        description: '启用 iStore 商店'
-        required: false
-        default: false
-        type: boolean
       enable_docker_kernel:          # 👈 修改：拆分为 Docker 内核支持
         description: '启用 Docker 内核支持 (Cgroups/IPvlan等)'
         required: false
@@ -33,6 +28,11 @@ on:
         type: boolean
       enable_docker_apps:            # 👈 修改：拆分为 Docker 用户态软件
         description: '启用 Docker 用户态软件 (dockerd等)'
+        required: false
+        default: false
+        type: boolean
+      enable_istore:                 # 👈 新增：云编译时可勾选的 iStore 商店开关（默认关闭）
+        description: '启用 iStore 商店'
         required: false
         default: false
         type: boolean
