@@ -67,9 +67,16 @@ render() {
 			if (u < 0) u = 0
 			if (s < 0) s = 0
 
+			#if (i == 0) {
+			#	total = sprintf("USR: %d%% SYS: %d%%", u, s)
+			#}
+
 			if (i == 0) {
-				total = sprintf("USR: %d%% SYS: %d%%", u, s)
+				tot = int(((ub[k] - ua[k]) + (sb[k] - sa[k])) * 100 / d + 0.5)
+				if (tot > 100) tot = 100
+				total = sprintf("Total: %d%% USR: %d%% SYS: %d%%", tot, u, s)
 			}
+
 			else {
 				tot = int(((ub[k] - ua[k]) + (sb[k] - sa[k])) * 100 / d + 0.5)
 				if (tot > 100) tot = 100
