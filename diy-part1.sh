@@ -20,6 +20,13 @@ else
     echo "package/luci-app-airoha-npu already exists, skip clone."
 fi
 
+# 👈 新增：克隆 luci-theme-carbon 主题
+if [ ! -d "package/luci-theme-carbon" ]; then
+    git clone --depth=1 https://github.com/mrjoechen/luci-theme-carbon.git package/luci-theme-carbon
+else
+    echo "package/luci-theme-carbon already exists, skip clone."
+fi
+
 # ============================================================
 # 3. 添加 kenzok8/small-package 源（包含 iStore 商店和首页）
 # ============================================================
@@ -52,17 +59,13 @@ if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "null" ]; then
     
     while read -r asset_name; do
         if [[ "$asset_name" == luci-app-natmode*.apk || "$asset_name" == luci-app-pon-status*.apk ]]; then
-            # 👈 修复：精准提取包名前缀（如 luci-app-natmode 或 luci-app-pon-status）
             PKG_PREFIX=$(echo "$asset_name" | grep -oE '^luci-app-(natmode|pon-status)')
-            
             NEED_DOWNLOAD=false
-            # 使用提取出的 PKG_PREFIX 去查找本地旧文件
             LOCAL_FILES=$(ls "$APK_DIR"/${PKG_PREFIX}*.apk 2>/dev/null || true)
             
             if [ -n "$LOCAL_FILES" ]; then
                 FIRST_LOCAL_FILE=$(echo "$LOCAL_FILES" | head -n 1)
                 LOCAL_TS=$(git -C "$GITHUB_WORKSPACE" log -1 --format=%ct -- "apk/$(basename "$FIRST_LOCAL_FILE")" 2>/dev/null)
-                
                 if [ -n "$LOCAL_TS" ] && [ "$REMOTE_TS" -le "$LOCAL_TS" ]; then
                     echo "本地已存在更新的 $asset_name，跳过下载"
                 else
@@ -75,10 +78,8 @@ if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "null" ]; then
             if [ "$NEED_DOWNLOAD" = true ]; then
                 TMP_DIR=$(mktemp -d)
                 echo "下载 $asset_name 到临时目录..."
-                
                 DOWNLOAD_URL="https://github.com/$TARGET_REPO/releases/download/$LATEST_TAG/$asset_name"
                 if curl -sL -o "$TMP_DIR/$asset_name" "$DOWNLOAD_URL"; then
-                    # 👈 修复：彻底清理所有同前缀的旧版本包
                     rm -f "$APK_DIR"/${PKG_PREFIX}*.apk
                     mv "$TMP_DIR"/"$asset_name" "$APK_DIR"/
                     echo "替换成功: $asset_name"
@@ -100,7 +101,6 @@ if [ "$UPDATE_APK" = true ]; then
     cd "$GITHUB_WORKSPACE"
     git config user.name "github-actions[bot]"
     git config user.email "github-actions[bot]@users.noreply.github.com"
-    # 这里使用 git add -A 确保删除操作也被 Git 记录
     git add -A apk/
     git commit -m "Auto-update APK files from qwe-qaq/luci-app [skip ci]" || true
     git push origin HEAD:$GITHUB_REF_NAME || true
@@ -135,4 +135,4 @@ else
     echo "警告：autocore/Makefile 或源码 autocore/Makefile 不存在，跳过覆盖。"
 fi
 
-echo "diy-part1.sh done: luci-app-airoha-npu cloned, small feed added, apk downloaded, autocore checked."
+echo "diy-part1.sh done: luci-app-airoha-npu cloned, luci-theme-carbon cloned, small feed added, apk downloaded, autocore checked."
