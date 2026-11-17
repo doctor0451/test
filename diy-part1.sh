@@ -20,11 +20,18 @@ else
     echo "package/luci-app-airoha-npu already exists, skip clone."
 fi
 
-# 👈 克隆 luci-theme-carbon 主题
+# 👈 新增：克隆 luci-theme-carbon 主题
 if [ ! -d "package/luci-theme-carbon" ]; then
     git clone --depth=1 https://github.com/mrjoechen/luci-theme-carbon.git package/luci-theme-carbon
 else
     echo "package/luci-theme-carbon already exists, skip clone."
+fi
+
+# 👈 新增：克隆 luci-app-traffic 源码直接编译
+if [ ! -d "package/luci-app-traffic" ]; then
+    git clone --depth=1 https://github.com/shb110119/luci-app-traffic.git package/luci-app-traffic
+else
+    echo "package/luci-app-traffic already exists, skip clone."
 fi
 
 # ============================================================
@@ -35,9 +42,9 @@ grep -q "src-git small" feeds.conf.default || \
     echo "src-git small https://github.com/kenzok8/small-package" >> feeds.conf.default
 
 # ============================================================
-# 4. 检查并拉取最新的 apk 软件包
+# 4. 检查并拉取 qwe-qaq/luci-app 最新的 natmode 和 pon-status apk
 # ============================================================
-echo "检查并下载最新的自定义 apk 软件包..."
+echo "检查并下载最新的 luci-app-natmode 和 luci-app-pon-status apk..."
 
 APK_DIR="$GITHUB_WORKSPACE/apk"
 mkdir -p "$APK_DIR"
@@ -106,8 +113,8 @@ fetch_latest_apks() {
 # 拉取 qwe-qaq/luci-app 的 natmode 和 pon-status 包
 fetch_latest_apks "qwe-qaq/luci-app" "luci-app-natmode*.apk|luci-app-pon-status*.apk"
 
-# 👈 新增：拉取 shb110119/luci-app-traffic 的包
-fetch_latest_apks "shb110119/luci-app-traffic" "*.apk"
+# 👈 删除：已改用源码编译 luci-app-traffic，不再下载其 APK
+# fetch_latest_apks "shb110119/luci-app-traffic" "*.apk"
 
 # 👈 如果下载了新的 APK，把它推送到你的 GitHub 仓库
 if [ "$UPDATE_APK" = true ]; then
@@ -149,4 +156,4 @@ else
     echo "警告：autocore/Makefile 或源码 autocore/Makefile 不存在，跳过覆盖。"
 fi
 
-echo "diy-part1.sh done: luci-app-airoha-npu cloned, luci-theme-carbon cloned, small feed added, apk downloaded, autocore checked."
+echo "diy-part1.sh done: luci-app-airoha-npu cloned, luci-theme-carbon cloned, luci-app-traffic cloned, small feed added, apk downloaded, autocore checked."
