@@ -48,9 +48,19 @@ grep -q "^CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_h3c_hm2004-du=" .co
 # 4. 选中 luci-app-airoha-npu
 #    如果 .config 中已有对应行，则改成 =y；没有则追加
 # ============================================================
+#sed -i 's/^# CONFIG_PACKAGE_luci-app-airoha-npu is not set/CONFIG_PACKAGE_luci-app-airoha-npu=y/' .config
+#grep -q "^CONFIG_PACKAGE_luci-app-airoha-npu=" .config || echo "CONFIG_PACKAGE_luci-app-airoha-npu=y" >> .config
+
 sed -i 's/^# CONFIG_PACKAGE_luci-app-airoha-npu is not set/CONFIG_PACKAGE_luci-app-airoha-npu=y/' .config
 grep -q "^CONFIG_PACKAGE_luci-app-airoha-npu=" .config || echo "CONFIG_PACKAGE_luci-app-airoha-npu=y" >> .config
 
+# 👈 新增：选中 luci-app-traffic 及其依赖 vnstat2
+echo "选中 luci-app-traffic 和 vnstat2..."
+sed -i 's/^# CONFIG_PACKAGE_luci-app-traffic is not set/CONFIG_PACKAGE_luci-app-traffic=y/' .config
+grep -q "^CONFIG_PACKAGE_luci-app-traffic=" .config || echo "CONFIG_PACKAGE_luci-app-traffic=y" >> .config
+
+sed -i 's/^# CONFIG_PACKAGE_vnstat2 is not set/CONFIG_PACKAGE_vnstat2=y/' .config
+grep -q "^CONFIG_PACKAGE_vnstat2=" .config || echo "CONFIG_PACKAGE_vnstat2=y" >> .config
 # ============================================================
 # 5. 集成自定义 apk 软件包
 #    把 apk 放到 files/etc/apk/custom-packages/
