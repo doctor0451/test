@@ -20,7 +20,7 @@ else
     echo "package/luci-app-airoha-npu already exists, skip clone."
 fi
 
-# 👈 新增：克隆 luci-theme-carbon 主题
+# 👈 克隆 luci-theme-carbon 主题
 if [ ! -d "package/luci-theme-carbon" ]; then
     git clone --depth=1 https://github.com/mrjoechen/luci-theme-carbon.git package/luci-theme-carbon
 else
@@ -35,65 +35,79 @@ grep -q "src-git small" feeds.conf.default || \
     echo "src-git small https://github.com/kenzok8/small-package" >> feeds.conf.default
 
 # ============================================================
-# 4. 检查并拉取 qwe-qaq/luci-app 最新的 natmode 和 pon-status apk
+# 4. 检查并拉取最新的 apk 软件包
 # ============================================================
-echo "检查并下载最新的 luci-app-natmode 和 luci-app-pon-status apk..."
+echo "检查并下载最新的自定义 apk 软件包..."
 
-TARGET_REPO="qwe-qaq/luci-app"
 APK_DIR="$GITHUB_WORKSPACE/apk"
 mkdir -p "$APK_DIR"
-
 UPDATE_APK=false
 
-# 获取 API JSON
-LATEST_RELEASE_JSON=$(curl -s "https://api.github.com/repos/$TARGET_REPO/releases/latest")
-if [[ -z "$LATEST_RELEASE_JSON" ]] || [[ "$(echo "$LATEST_RELEASE_JSON" | jq -r '.message')" == "Not Found" ]]; then
-    LATEST_RELEASE_JSON=$(curl -s "https://api.github.com/repos/$TARGET_REPO/releases" | jq '.[0]')
-fi
-
-LATEST_TAG=$(echo "$LATEST_RELEASE_JSON" | jq -r '.tag_name')
-REMOTE_PUBLISHED_AT=$(echo "$LATEST_RELEASE_JSON" | jq -r '.published_at')
-
-if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "null" ]; then
-    REMOTE_TS=$(date -d "$REMOTE_PUBLISHED_AT" +%s)
+# 封装通用的 API 获取和下载逻辑
+fetch_latest_apks() {
+    local target_repo="$1"
+    local filter_pattern="$2"
     
-    while read -r asset_name; do
-        if [[ "$asset_name" == luci-app-natmode*.apk || "$asset_name" == luci-app-pon-status*.apk ]]; then
-            PKG_PREFIX=$(echo "$asset_name" | grep -oE '^luci-app-(natmode|pon-status)')
-            NEED_DOWNLOAD=false
-            LOCAL_FILES=$(ls "$APK_DIR"/${PKG_PREFIX}*.apk 2>/dev/null || true)
-            
-            if [ -n "$LOCAL_FILES" ]; then
-                FIRST_LOCAL_FILE=$(echo "$LOCAL_FILES" | head -n 1)
-                LOCAL_TS=$(git -C "$GITHUB_WORKSPACE" log -1 --format=%ct -- "apk/$(basename "$FIRST_LOCAL_FILE")" 2>/dev/null)
-                if [ -n "$LOCAL_TS" ] && [ "$REMOTE_TS" -le "$LOCAL_TS" ]; then
-                    echo "本地已存在更新的 $asset_name，跳过下载"
+    echo "--> 处理仓库: $target_repo"
+    
+    # 获取 API JSON
+    local latest_release_json=$(curl -s "https://api.github.com/repos/$target_repo/releases/latest")
+    if [[ -z "$latest_release_json" ]] || [[ "$(echo "$latest_release_json" | jq -r '.message')" == "Not Found" ]]; then
+        latest_release_json=$(curl -s "https://api.github.com/repos/$target_repo/releases" | jq '.[0]')
+    fi
+
+    local latest_tag=$(echo "$latest_release_json" | jq -r '.tag_name')
+    local remote_published_at=$(echo "$latest_release_json" | jq -r '.published_at')
+
+    if [ -n "$latest_tag" ] && [ "$latest_tag" != "null" ]; then
+        local remote_ts=$(date -d "$remote_published_at" +%s)
+        
+        # 使用子 shell 避免 while 循环内部变量丢失
+        while read -r asset_name; do
+            # 过滤出需要的 apk 文件
+            if [[ "$asset_name" == $filter_pattern ]]; then
+                local pkg_prefix=$(echo "$asset_name" | grep -oE '^[a-zA-Z0-9-]+' | sed 's/-[0-9].*//')
+                local need_download=false
+                local local_files=$(ls "$APK_DIR"/${pkg_prefix}*.apk 2>/dev/null || true)
+                
+                if [ -n "$local_files" ]; then
+                    local first_local_file=$(echo "$local_files" | head -n 1)
+                    local local_ts=$(git -C "$GITHUB_WORKSPACE" log -1 --format=%ct -- "apk/$(basename "$first_local_file")" 2>/dev/null)
+                    if [ -n "$local_ts" ] && [ "$remote_ts" -le "$local_ts" ]; then
+                        echo "本地已存在更新的 $asset_name，跳过下载"
+                    else
+                        need_download=true
+                    fi
                 else
-                    NEED_DOWNLOAD=true
+                    need_download=true
                 fi
-            else
-                NEED_DOWNLOAD=true
-            fi
-            
-            if [ "$NEED_DOWNLOAD" = true ]; then
-                TMP_DIR=$(mktemp -d)
-                echo "下载 $asset_name 到临时目录..."
-                DOWNLOAD_URL="https://github.com/$TARGET_REPO/releases/download/$LATEST_TAG/$asset_name"
-                if curl -sL -o "$TMP_DIR/$asset_name" "$DOWNLOAD_URL"; then
-                    rm -f "$APK_DIR"/${PKG_PREFIX}*.apk
-                    mv "$TMP_DIR"/"$asset_name" "$APK_DIR"/
-                    echo "替换成功: $asset_name"
-                    UPDATE_APK=true
-                else
-                    echo "警告：$asset_name 下载失败，保留本地旧版本。"
+                
+                if [ "$need_download" = true ]; then
+                    local tmp_dir=$(mktemp -d)
+                    echo "下载 $asset_name 到临时目录..."
+                    local download_url="https://github.com/$target_repo/releases/download/$latest_tag/$asset_name"
+                    if curl -sL -o "$tmp_dir/$asset_name" "$download_url"; then
+                        rm -f "$APK_DIR"/${pkg_prefix}*.apk
+                        mv "$tmp_dir"/"$asset_name" "$APK_DIR"/
+                        echo "替换成功: $asset_name"
+                        UPDATE_APK=true
+                    else
+                        echo "警告：$asset_name 下载失败，保留本地旧版本。"
+                    fi
+                    rm -rf "$tmp_dir"
                 fi
-                rm -rf "$TMP_DIR"
             fi
-        fi
-    done < <(echo "$LATEST_RELEASE_JSON" | jq -r '.assets[].name')
-else
-    echo "警告：无法获取 $TARGET_REPO 的最新 Release，将使用仓库内原有 apk 文件。"
-fi
+        done < <(echo "$latest_release_json" | jq -r '.assets[].name')
+    else
+        echo "警告：无法获取 $target_repo 的最新 Release。"
+    fi
+}
+
+# 拉取 qwe-qaq/luci-app 的 natmode 和 pon-status 包
+fetch_latest_apks "qwe-qaq/luci-app" "luci-app-natmode*.apk|luci-app-pon-status*.apk"
+
+# 👈 新增：拉取 shb110119/luci-app-traffic 的包
+fetch_latest_apks "shb110119/luci-app-traffic" "*.apk"
 
 # 👈 如果下载了新的 APK，把它推送到你的 GitHub 仓库
 if [ "$UPDATE_APK" = true ]; then
@@ -102,7 +116,7 @@ if [ "$UPDATE_APK" = true ]; then
     git config user.name "github-actions[bot]"
     git config user.email "github-actions[bot]@users.noreply.github.com"
     git add -A apk/
-    git commit -m "Auto-update APK files from qwe-qaq/luci-app [skip ci]" || true
+    git commit -m "Auto-update custom APK files [skip ci]" || true
     git push origin HEAD:$GITHUB_REF_NAME || true
     echo "推送完成。"
     cd ponwrt
